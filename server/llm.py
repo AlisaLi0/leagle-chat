@@ -23,7 +23,10 @@ import httpx
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://tianshu-gateway.cloud/v1").rstrip("/")
 LLM_API_KEY = os.getenv("LLM_API_KEY", "")
-LLM_MODEL = os.getenv("LLM_MODEL", "auto")
+# Default to a model that returns the final answer in `content` (a separate
+# `reasoning` channel may also exist and is ignored). "auto" can resolve to a
+# backend that only emits `reasoning` with content==null, which we cannot use.
+LLM_MODEL = os.getenv("LLM_MODEL", "Qwen/Qwen3-8B")
 _TIMEOUT = float(os.getenv("LLM_TIMEOUT", "60"))
 
 
@@ -42,13 +45,20 @@ async def complete_json(messages: list[dict], *, max_tokens: int = 400) -> dict:
         "temperature": 0.1,
         "max_tokens": max_tokens,
         "response_format": {"type": "json_object"},
+        # Disable upstream "thinking" so the answer lands in `content` (not in a
+        # separate reasoning channel). The gateway maps this to enable_thinking=false
+        # for vLLM/SiliconFlow and drops it for plain models.
+        "reasoning_effort": "off",
     }
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         resp = await client.post(
             f"{LLM_BASE_URL}/chat/completions", headers=_headers(), json=payload
         )
         resp.raise_for_status()
-        content = resp.json()["choices"][0]["message"]["content"]
+        msg = resp.json()["choices"][0]["message"]
+        # Thinking models may put the text in reasoning_content/reasoning and
+        # leave content == null; fall back so the JSON can still be salvaged.
+        content = msg.get("content") or msg.get("reasoning_content") or msg.get("reasoning") or ""
     try:
         return json.loads(content)
     except (json.JSONDecodeError, TypeError):
@@ -70,6 +80,8 @@ async def stream_chat(messages: list[dict], *, max_tokens: int = 900) -> AsyncIt
         "temperature": 0.2,
         "max_tokens": max_tokens,
         "stream": True,
+        # Disable upstream "thinking" so the grounded answer streams in `content`.
+        "reasoning_effort": "off",
     }
     async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
         async with client.stream(
@@ -77,6 +89,8 @@ async def stream_chat(messages: list[dict], *, max_tokens: int = 900) -> AsyncIt
             headers=_headers(), json=payload,
         ) as resp:
             resp.raise_for_status()
+            saw_content = False
+            reasoning_buf = []
             async for line in resp.aiter_lines():
                 if not line or not line.startswith("data:"):
                     continue
@@ -85,8 +99,22 @@ async def stream_chat(messages: list[dict], *, max_tokens: int = 900) -> AsyncIt
                     break
                 try:
                     obj = json.loads(data)
-                    delta = obj["choices"][0]["delta"].get("content")
-                    if delta:
-                        yield delta
+                    delta = obj["choices"][0]["delta"]
                 except (json.JSONDecodeError, KeyError, IndexError):
                     continue
+                # Prefer the real answer channel (`content`). Stream it straight
+                # through. Buffer any `reasoning` only as a fallback for models
+                # that put their whole answer there with content == null.
+                content = delta.get("content")
+                if content:
+                    saw_content = True
+                    yield content
+                    continue
+                if not saw_content:
+                    chunk = delta.get("reasoning_content") or delta.get("reasoning")
+                    if chunk:
+                        reasoning_buf.append(chunk)
+            # Nothing came through `content` at all: fall back to reasoning so the
+            # user still gets the model's grounded analysis instead of nothing.
+            if not saw_content and reasoning_buf:
+                yield "".join(reasoning_buf)

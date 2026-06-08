@@ -53,6 +53,42 @@ class Case:
         }
 
 
+def _result_key(r: dict) -> str:
+    """Stable identity for de-duping a search hit across rankings."""
+    return str(r.get("cluster_id") or r.get("id") or r.get("absolute_url") or id(r))
+
+
+def _rrf_fuse(rankings: list[list[dict]], *, k: int = 60) -> list[dict]:
+    """Reciprocal Rank Fusion of several ranked result lists.
+
+    Each list is ordered best-first. A result's fused score is the sum over the
+    lists it appears in of 1/(k + rank). Results strong on either ranking (text
+    relevance OR citation authority) bubble up; the first-seen dict is kept.
+    """
+    scores: dict[str, float] = {}
+    first: dict[str, dict] = {}
+    seen_in: dict[str, int] = {}
+    for ranking in rankings:
+        for rank, r in enumerate(ranking):
+            key = _result_key(r)
+            scores[key] = scores.get(key, 0.0) + 1.0 / (k + rank)
+            seen_in[key] = seen_in.get(key, 0) + 1
+            if key not in first:
+                first[key] = r
+
+    # A result that shows up in BOTH rankings (relevant AND authoritative) is the
+    # strongest signal, so give it a small bonus. This lifts true leading cases
+    # (e.g. Miranda v. Arizona, which both matches and is heavily cited) above
+    # single-list noise without letting raw citation count hijack narrow factual
+    # questions the way a global citeCount sort does.
+    def _final(key: str) -> float:
+        bonus = 0.5 / k if seen_in.get(key, 0) >= 2 else 0.0
+        return scores[key] + bonus
+
+    ordered = sorted(first.values(), key=lambda r: _final(_result_key(r)), reverse=True)
+    return ordered
+
+
 class CourtListener:
     def __init__(
         self,
@@ -75,18 +111,38 @@ class CourtListener:
         court: str = "",
         sort_by: str = "relevance",
     ) -> list[Case]:
+        """Retrieve real case-law hits.
+
+        Recall/ranking fix: CourtListener's text relevance ("score desc") and
+        authority ("citeCount desc") each fail on a different kind of question -
+        score buries a leading case under same-name noise (e.g. a Miranda query
+        returns "Enoc Miranda v. CSC Sugar" instead of Miranda v. Arizona),
+        while citeCount drags in a famous but off-topic case for narrow factual
+        questions. So we run BOTH rankings and fuse them with Reciprocal Rank
+        Fusion - the result that is strong on either axis rises to the top.
+        """
         q = (query or "").strip()
         if not q:
             return []
-        params: dict = {
-            "q": q,
-            "type": "o",  # opinions / case law
-            "order_by": _SORT_MAP.get(sort_by, "score desc"),
-        }
-        if court.strip():
-            params["court"] = court.strip()
-        data = await self._get("/search/", params)
-        rows = (data.get("results") or [])[: max(1, min(max_results, 20))]
+
+        async def _ranked(order_by: str) -> list[dict]:
+            params: dict = {"q": q, "type": "o", "order_by": order_by}
+            if court.strip():
+                params["court"] = court.strip()
+            data = await self._get("/search/", params)
+            return data.get("results") or []
+
+        # Two complementary rankings, fetched concurrently.
+        try:
+            by_score, by_cites = await asyncio.gather(
+                _ranked("score desc"), _ranked("citeCount desc")
+            )
+        except Exception:
+            # Fall back to a single ranking if the gather fails for any reason.
+            by_score, by_cites = (await _ranked(_SORT_MAP.get(sort_by, "score desc")), [])
+
+        fused = _rrf_fuse([by_score, by_cites], k=60)
+        rows = fused[: max(1, min(max_results, 20))]
         return [self._parse(r) for r in rows]
 
     def _parse(self, r: dict) -> Case:

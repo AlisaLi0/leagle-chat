@@ -83,6 +83,20 @@ _ORGANIZE_SYSTEM = (
     "consult a licensed attorney. State this briefly at the end, once. Be concise."
 )
 
+_ASSESS_SYSTEM = (
+    "You are the retrieval-quality checker of a US legal research tool. Given the "
+    "user's question and the list of cases a keyword search returned, decide whether "
+    "those cases are actually on-point - same legal issue, and (if the user named one) "
+    "the right jurisdiction. Judge by legal substance, not surface words.\n"
+    "Return ONLY a JSON object: {\"relevant\": true|false, "
+    "\"query\": \"<an improved full-text search query, only when relevant=false>\", "
+    "\"court\": \"<optional CourtListener court id like scotus/ca9/cal, or empty>\"}.\n"
+    "relevant=true if at least a few of the cases squarely address the user's issue. "
+    "If the list is empty or off-topic, relevant=false and propose a BETTER query that "
+    "changes strategy - use the controlling statute or doctrine name, the cause of "
+    "action, or the jurisdiction - rather than mere synonyms of the last query."
+)
+
 
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
@@ -112,6 +126,34 @@ def _case_block(cases: list) -> str:
             f"cited by {c.cite_count}. Excerpt: {snip}"
         )
     return "\n".join(lines)
+
+
+def _case_titles(cases: list) -> str:
+    """Compact one-line-per-case view for the relevance check (token-light)."""
+    return "\n".join(
+        f"[{i}] {c.title} - {c.court or '?'}" + (f", {c.date}" if c.date else "")
+        for i, c in enumerate(cases, 1)
+    ) or "(no cases found)"
+
+
+async def _assess(question: str, cases: list) -> dict:
+    """Judge whether retrieved cases are on-point; if not, propose a better query.
+
+    Returns {"relevant": bool, "query": str, "court": str}. Degrades to
+    relevant=True on any failure so a usable answer is never blocked by the check.
+    """
+    convo = [
+        {"role": "system", "content": _ASSESS_SYSTEM},
+        {"role": "user", "content": f"User question:\n{question}\n\n"
+                                    f"Cases returned by the search:\n{_case_titles(cases)}"},
+    ]
+    try:
+        verdict = await llm.complete_json(convo, max_tokens=200)
+    except (httpx.HTTPError, KeyError, ValueError):
+        return {"relevant": True}
+    if not isinstance(verdict, dict) or "relevant" not in verdict:
+        return {"relevant": True}
+    return verdict
 
 
 async def _organize(question: str, cases: list) -> AsyncIterator[str]:
@@ -152,14 +194,35 @@ async def chat(request: Request):
 
         query = (plan.get("query") or question).strip()
         court = (plan.get("court") or "").strip()
-        yield _sse("status", {"message": f"Searching case law for: {query}"})
 
-        try:
-            cases = await cl.search(query, court=court, max_results=8)
-        except httpx.HTTPError as exc:
-            yield _sse("error", {"message": f"search failed: {exc}"})
-            yield _sse("done", {})
-            return
+        # Search, then check the results are actually on-point; if not, let the
+        # model refine the query and search again (bounded). This is the
+        # "multi-step research, handled for you" loop.
+        MAX_SEARCHES = 3
+        cases: list = []
+        tried: set = set()
+        for attempt in range(1, MAX_SEARCHES + 1):
+            yield _sse("status", {"message": f"Searching case law for: {query}"})
+            try:
+                cases = await cl.search(query, court=court, max_results=8)
+            except httpx.HTTPError as exc:
+                yield _sse("error", {"message": f"search failed: {exc}"})
+                yield _sse("done", {})
+                return
+            tried.add(query.lower())
+            if attempt == MAX_SEARCHES:
+                break
+            # Ask the model whether these results answer the question.
+            verdict = await _assess(question, cases)
+            if verdict.get("relevant", True):
+                break
+            new_query = (verdict.get("query") or "").strip()
+            if not new_query or new_query.lower() in tried:
+                break  # nothing better to try
+            court = (verdict.get("court") or court).strip()
+            yield _sse("status", {"message":
+                       f"Those weren't on point - refining search: {new_query}"})
+            query = new_query
 
         yield _sse("cases", {"query": query, "court": court,
                              "count": len(cases),
