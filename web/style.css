@@ -1,14 +1,14 @@
 :root {
-  --bg: #0f1115;
-  --panel: #171a21;
-  --panel-2: #1e222b;
-  --ink: #e8eaed;
-  --muted: #9aa3b2;
-  --accent: #4f8cff;
-  --accent-2: #2f6fe0;
-  --line: #272c36;
-  --good: #3fb27f;
-  --warn: #d9a441;
+  --bg: #f6f7f9;
+  --panel: #ffffff;
+  --panel-2: #eef1f5;
+  --ink: #1f2430;
+  --muted: #5b6675;
+  --accent: #2f6fe0;
+  --accent-2: #2560d0;
+  --line: #e2e6ec;
+  --good: #1f9d63;
+  --warn: #c0871d;
   --maxw: 820px;
 }
 
