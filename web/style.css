@@ -228,6 +228,24 @@ html, body {
 .cyt-cited { color: #5b6675; background: var(--panel-2); }
 .cyt-rarely-cited { color: #8a93a3; background: var(--panel-2); }
 
+/* Federal regulation (CFR) cards — reuse case styling, distinct accent. */
+.statutes { margin: 4px 0 14px; }
+.statlist { display: flex; flex-direction: column; gap: 10px; }
+.statute {
+  background: var(--panel); border: 1px solid var(--line);
+  border-left: 3px solid var(--accent); border-radius: 11px; padding: 12px 14px;
+}
+.statute .row1 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.statute .rnum {
+  flex: 0 0 auto; font-weight: 700; color: var(--accent-2);
+  background: var(--accent-soft); border-radius: 6px; padding: 1px 8px; font-size: 12.5px;
+}
+.statute .title { font-weight: 600; font-family: ui-monospace, monospace; font-size: 13.5px; }
+.statute .meta { color: var(--muted); font-size: 12.5px; margin: 5px 0 0; }
+.statute .snip { color: var(--muted); font-size: 13px; margin-top: 7px; }
+.statute a.open { display: inline-block; margin-top: 9px; color: var(--accent-2); text-decoration: none; font-size: 13px; font-weight: 600; }
+.statute a.open:hover { text-decoration: underline; }
+
 .foot { text-align: center; color: var(--muted); font-size: 11.5px; padding: 6px 0 12px; }
 
 /* ── Responsive: off-canvas sidebar ───────────────────────────── */

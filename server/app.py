@@ -31,6 +31,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from .courtlistener import CourtListener
+from .statutes import ECFR
 from . import llm
 
 HOST = os.getenv("LEAGLE_HOST", "127.0.0.1")
@@ -41,6 +42,7 @@ WEB_DIR = os.getenv("LEAGLE_WEB_DIR", os.path.join(os.path.dirname(__file__), ".
 CORS_ORIGINS = os.getenv("LEAGLE_CORS_ORIGINS", "*")
 
 cl = CourtListener(api_token=os.getenv("COURTLISTENER_API_TOKEN"))
+ecfr = ECFR()
 app = FastAPI(title="leagle-chat")
 
 app.add_middleware(
@@ -52,16 +54,21 @@ app.add_middleware(
 
 _ROUTE_SYSTEM = (
     "You are the front-end of leagleLM, a US legal RESEARCH engine grounded in real "
-    "case law. Your job is to turn the user's plain-English message into a precise "
-    "case-law search, OR — when key details are missing — ask ONE short clarifying "
-    "question before researching.\n"
+    "case law AND federal regulations. Your job is to turn the user's plain-English "
+    "message into a precise case-law search, OR — when key details are missing — ask "
+    "ONE short clarifying question before researching.\n"
     "Return ONLY a JSON object: {\"action\": \"search\" | \"clarify\", "
     "\"query\": \"<keywords for full-text case-law search>\", "
     "\"court\": \"<optional CourtListener court id like scotus/ca9/cal, or empty>\", "
+    "\"statute_query\": \"<keywords for federal regulation (CFR) search, ONLY if the "
+    "question is plausibly governed by a FEDERAL rule — e.g. overtime/wage, workplace "
+    "safety, environmental, benefits, food/drug, immigration procedure; else empty>\", "
     "\"clarify\": \"<one short question, only if action=clarify>\"}.\n"
+    "Use statute_query ONLY for areas actually regulated federally. Leave it empty for "
+    "purely state-law topics (landlord-tenant, most contracts, family, small claims).\n"
     "Clarify before answering when the jurisdiction, the procedural posture, a key "
     "fact, or which competing theory the user means is genuinely missing and would "
-    "change which authorities matter. Otherwise prefer action=search. Keep the query "
+    "change which authorities matter. Otherwise prefer action=search. Keep queries "
     "concise and legally meaningful."
 )
 
@@ -161,15 +168,21 @@ async def _assess(question: str, cases: list) -> dict:
     return verdict
 
 
-async def _organize(question: str, cases: list) -> AsyncIterator[str]:
-    """Stream an answer grounded only in the retrieved cases."""
-    user = (
-        f"User question:\n{question}\n\n"
-        f"Retrieved real cases (the ONLY cases you may discuss):\n{_case_block(cases)}"
-    )
+async def _organize(question: str, cases: list, statutes: list | None = None) -> AsyncIterator[str]:
+    """Stream an answer grounded only in the retrieved cases (+ any CFR sections)."""
+    parts = [
+        f"User question:\n{question}\n",
+        f"Retrieved real cases (the ONLY cases you may discuss):\n{_case_block(cases)}",
+    ]
+    if statutes:
+        lines = [f"[R{i}] {s.citation}" + (f" — {s.heading}" if s.heading else "")
+                 + (f": {(s.excerpt or '')[:200]}" if s.excerpt else "")
+                 for i, s in enumerate(statutes, 1)]
+        parts.append("Retrieved federal regulations (CFR) — real primary law you may "
+                     "also cite, as [R1], [R2], …:\n" + "\n".join(lines))
     convo = [
         {"role": "system", "content": _ORGANIZE_SYSTEM},
-        {"role": "user", "content": user},
+        {"role": "user", "content": "\n\n".join(parts)},
     ]
     async for delta in llm.stream_chat(convo, max_tokens=900):
         yield delta
@@ -242,17 +255,32 @@ async def chat(request: Request):
                              "count": len(cases),
                              "cases": [c.to_dict() for c in cases]})
 
-        if not cases:
-            yield _sse("token", {"text": "No matching case law was found for this "
-                                 "query. Try rephrasing with the parties, the legal "
-                                 "issue, or a jurisdiction."})
+        # Federal regulations (CFR), when the router judged the question to be
+        # plausibly governed by a federal rule. Best-effort, parallel-friendly.
+        statutes: list = []
+        statute_query = (plan.get("statute_query") or "").strip()
+        if statute_query:
+            yield _sse("status", {"message": f"Searching federal regulations for: {statute_query}"})
+            try:
+                statutes = await ecfr.search(statute_query, max_results=5)
+            except Exception:
+                statutes = []
+            if statutes:
+                yield _sse("statutes", {"query": statute_query,
+                                        "count": len(statutes),
+                                        "statutes": [s.to_dict() for s in statutes]})
+
+        if not cases and not statutes:
+            yield _sse("token", {"text": "No matching case law or federal regulation "
+                                 "was found for this query. Try rephrasing with the "
+                                 "parties, the legal issue, or a jurisdiction."})
             yield _sse("done", {})
             return
 
         # Organize the retrieved cases (LLM). Degrade gracefully if it is down.
         try:
             got_any = False
-            async for delta in _organize(question, cases):
+            async for delta in _organize(question, cases, statutes):
                 got_any = True
                 yield _sse("token", {"text": delta})
             if not got_any:

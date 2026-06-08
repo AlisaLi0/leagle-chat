@@ -77,6 +77,10 @@ function newBotTurn() {
       <div class="auth-head">Table of Authorities <span class="cnt"></span></div>
       <div class="cases"></div>
     </div>
+    <div class="statutes" style="display:none">
+      <div class="auth-head">Federal Regulations (CFR) <span class="cnt"></span></div>
+      <div class="statlist"></div>
+    </div>
     <div class="answer" style="display:none"></div>`;
   chat.appendChild(el);
   setStep(el, 'analyze', 'active');
@@ -88,6 +92,9 @@ function newBotTurn() {
     authEl: el.querySelector('.authorities'),
     authCnt: el.querySelector('.auth-head .cnt'),
     casesEl: el.querySelector('.cases'),
+    statEl: el.querySelector('.statutes'),
+    statCnt: el.querySelector('.statutes .cnt'),
+    statListEl: el.querySelector('.statlist'),
     answerEl: el.querySelector('.answer'),
   };
 }
@@ -121,6 +128,20 @@ function renderCases(casesEl, turnId, cases) {
       ${c.snippet ? `<div class="snip">${escapeHtml(c.snippet.slice(0, 280))}…</div>` : ''}
       ${c.url ? `<a class="open" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">Open full opinion ↗</a>` : ''}`;
     casesEl.appendChild(card);
+  });
+}
+
+function renderStatutes(listEl, statutes) {
+  listEl.innerHTML = '';
+  statutes.forEach((s, i) => {
+    const card = document.createElement('div');
+    card.className = 'statute';
+    card.innerHTML = `
+      <div class="row1"><span class="rnum">R${i + 1}</span><span class="title">${escapeHtml(s.citation)}</span><span class="verified">Verified</span></div>
+      ${s.heading ? `<div class="meta">${escapeHtml(s.heading)}</div>` : ''}
+      ${s.excerpt ? `<div class="snip">${escapeHtml(s.excerpt.slice(0, 260))}…</div>` : ''}
+      ${s.url ? `<a class="open" href="${escapeHtml(s.url)}" target="_blank" rel="noopener">Open regulation ↗</a>` : ''}`;
+    listEl.appendChild(card);
   });
 }
 
@@ -197,6 +218,13 @@ async function send(text) {
             t.authEl.style.display = '';
             t.authCnt.textContent = '· ' + obj.count;
             renderCases(t.casesEl, t.turnId, obj.cases || []);
+          }
+          scrollDown();
+        } else if (ev === 'statutes') {
+          if (obj.count) {
+            t.statEl.style.display = '';
+            t.statCnt.textContent = '· ' + obj.count;
+            renderStatutes(t.statListEl, obj.statutes || []);
           }
           scrollDown();
         } else if (ev === 'token') {
