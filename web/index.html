@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>leagle — search real US case law in plain English</title>
+  <meta name="description" content="Ask a legal question in plain English and get the real US court opinions behind it — with citations and links. Search, not advice." />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">⚖︎</span>
+      <span class="name">leagle</span>
+    </div>
+    <div class="tagline">Search real US case law in plain English</div>
+  </header>
+
+  <main id="chat" class="chat">
+    <div class="intro">
+      <h1>Ask a legal question. Get the real cases.</h1>
+      <p>
+        Describe your situation in plain English. leagle finds the actual US court
+        opinions and statutes behind it — with citations and links you can open and
+        read yourself.
+      </p>
+      <p class="disclaimer">
+        leagle is a <strong>research tool</strong>: it returns real primary sources,
+        it does <strong>not</strong> give legal advice or predict outcomes. Always
+        verify, and consult a licensed attorney for advice.
+      </p>
+      <div class="examples">
+        <button class="ex">Can my landlord keep my security deposit for normal wear and tear?</button>
+        <button class="ex">What did Miranda v. Arizona actually hold?</button>
+        <button class="ex">Fourth Amendment limits on warrantless car searches</button>
+      </div>
+    </div>
+  </main>
+
+  <form id="composer" class="composer" autocomplete="off">
+    <textarea id="input" rows="1" placeholder="Ask in plain English…  (e.g. wrongful termination after reporting safety violations)"></textarea>
+    <button id="send" type="submit" aria-label="Send">➤</button>
+  </form>
+  <div class="foot">Sources: CourtListener / Free Law Project (public domain). Not legal advice.</div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
