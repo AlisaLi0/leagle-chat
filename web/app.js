@@ -21,6 +21,9 @@ const sendBtn = document.getElementById('send');
 const messages = []; // conversation history: {role, content}
 let turnSeq = 0;
 let busy = false;
+// Active search mode: 'chat' = full leagleLM reasoning; the toolkit entries set
+// 'concept' | 'keyword' | 'case' | 'citation' for a direct precise search.
+let currentMode = 'chat';
 
 function escapeHtml(s) {
   return String(s)
@@ -174,7 +177,7 @@ async function send(text) {
     const resp = await fetch(API_BASE + '/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ messages }),
+      body: JSON.stringify({ messages, mode: currentMode }),
     });
     if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
 
@@ -301,7 +304,7 @@ function renderHistory() {
     b.className = 'hist-item';
     b.title = x.q;
     b.innerHTML = `<span class="ht-type">Research</span>${escapeHtml(x.q)}`;
-    b.addEventListener('click', () => { closeNav(); send(x.q); });
+    b.addEventListener('click', () => { closeNav(); currentMode = 'chat'; send(x.q); });
     historyEl.appendChild(b);
   });
 }
@@ -319,7 +322,14 @@ document.querySelectorAll('.nav-item').forEach((b) => {
     document.querySelectorAll('.nav-item').forEach((x) => x.classList.remove('active'));
     b.classList.add('active');
     const tool = b.dataset.tool;
-    if (tool && TOOL_HINTS[tool]) input.placeholder = TOOL_HINTS[tool];
+    // Toolkit entry -> direct precise search in that mode. The leagleLM entry
+    // (data-action="new") goes back to the full conversational reasoning flow.
+    currentMode = (tool && TOOL_HINTS[tool]) ? tool : 'chat';
+    if (tool && TOOL_HINTS[tool]) {
+      input.placeholder = TOOL_HINTS[tool];
+    } else {
+      input.placeholder = 'Ask in plain English…  (e.g. wrongful termination after reporting safety violations)';
+    }
     input.focus();
     closeNav();
   });

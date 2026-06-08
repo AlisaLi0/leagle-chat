@@ -114,6 +114,30 @@ def _treatment_label(cited_by: int) -> str:
     return "rarely-cited"
 
 
+def _build_query(query: str, mode: str) -> str:
+    """Shape a raw user query into CourtListener search syntax for a given mode.
+
+    Already-formed field queries (the router emits plain keywords) pass through;
+    the toolkit modes wrap the input so each entry searches the right field.
+    """
+    q = (query or "").strip()
+    if not q:
+        return ""
+    # If the caller already used field syntax, don't double-wrap.
+    if any(tag in q for tag in ("caseName:", "citation:", "cites:")):
+        return q
+    if mode == "case":
+        return f'caseName:("{q}")'
+    if mode == "citation":
+        return f'citation:("{q}")'
+    if mode == "keyword":
+        # Exact-phrase match when the user gave a short phrase; otherwise leave
+        # the terms as-is (CourtListener ANDs them).
+        return f'"{q}"' if (" " in q and '"' not in q) else q
+    # concept (default): natural-language full-text search.
+    return q
+
+
 class CourtListener:
     def __init__(
         self,
@@ -135,8 +159,16 @@ class CourtListener:
         max_results: int = 8,
         court: str = "",
         sort_by: str = "relevance",
+        mode: str = "concept",
     ) -> list[Case]:
         """Retrieve real case-law hits.
+
+        `mode` shapes the CourtListener query so the sidebar toolkit entries each
+        search the way a lawyer expects:
+          - concept  : natural-language full text (default)
+          - keyword  : exact phrase match ("...")
+          - case     : caseName:("...") — find a decision by its name
+          - citation : citation:("...") — pinpoint a reporter cite like 384 U.S. 436
 
         Recall/ranking fix: CourtListener's text relevance ("score desc") and
         authority ("citeCount desc") each fail on a different kind of question -
@@ -146,7 +178,7 @@ class CourtListener:
         questions. So we run BOTH rankings and fuse them with Reciprocal Rank
         Fusion - the result that is strong on either axis rises to the top.
         """
-        q = (query or "").strip()
+        q = _build_query(query, mode)
         if not q:
             return []
 

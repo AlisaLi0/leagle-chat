@@ -200,8 +200,39 @@ async def chat(request: Request):
     if not messages:
         return JSONResponse(status_code=400, content={"error": "no messages"})
     question = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+    # Toolkit mode: one of concept|keyword|case|citation runs a direct, precise
+    # search (no conversational routing/answer). Default "chat" is the full
+    # leagleLM reasoning flow.
+    mode = str(body.get("mode") or "chat").strip().lower()
 
     async def gen() -> AsyncIterator[str]:
+        # ── Toolkit: direct precise search, no LLM routing or answer ──────────
+        if mode in ("concept", "keyword", "case", "citation"):
+            label = {"concept": "by concept", "keyword": "by keyword",
+                     "case": "by case name", "citation": "by citation"}[mode]
+            yield _sse("status", {"message": f"Searching case law {label}: {question}"})
+            try:
+                cases = await cl.search(question, mode=mode, max_results=10)
+            except httpx.HTTPError as exc:
+                yield _sse("error", {"message": f"search failed: {exc}"})
+                yield _sse("done", {})
+                return
+            if cases:
+                yield _sse("status", {"message": "Verifying how these authorities have been treated…"})
+                try:
+                    await cl.attach_treatment(cases, top=8)
+                except Exception:
+                    pass
+            yield _sse("cases", {"query": question, "court": "",
+                                 "count": len(cases),
+                                 "cases": [c.to_dict() for c in cases]})
+            if not cases:
+                yield _sse("token", {"text": "No matching case law was found. Try a "
+                                     "different spelling, a fuller case name, or a "
+                                     "precise reporter citation (e.g. 384 U.S. 436)."})
+            yield _sse("done", {})
+            return
+
         yield _sse("status", {"message": "Understanding your question…"})
         plan = await _route(messages)
 
