@@ -23,6 +23,8 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import time
+from collections import deque
 from collections.abc import AsyncIterator
 
 import httpx
@@ -41,6 +43,11 @@ WEB_DIR = os.getenv("LEAGLE_WEB_DIR", os.path.join(os.path.dirname(__file__), ".
 # Comma-separated allowed origins for the browser front-end (e.g. GitHub Pages).
 # "*" allows any origin (fine here: the API is public, read-only, no cookies).
 CORS_ORIGINS = os.getenv("LEAGLE_CORS_ORIGINS", "*")
+# Per-IP rate limit on /api/chat. Each chat turn fans out to several LLM calls
+# plus CourtListener / govinfo / eCFR requests, so it is the expensive endpoint
+# and the one whose abuse would burn our upstream quotas (govinfo 1000/h, the
+# LLM gateway, CourtListener). 0 disables the limit.
+CHAT_MAX_PER_HOUR = int(os.getenv("LEAGLE_CHAT_MAX_PER_HOUR", "30"))
 
 cl = CourtListener(api_token=os.getenv("COURTLISTENER_API_TOKEN"))
 ecfr = ECFR()
@@ -53,6 +60,68 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
+
+
+class _ChatRateLimit:
+    """Pure-ASGI per-IP sliding-hour rate limit for POST /api/chat.
+
+    Pure ASGI (not a Starlette BaseHTTPMiddleware) so it never buffers the
+    response body — essential for the SSE stream. Only the expensive chat
+    endpoint is counted; static files, /api/health and CORS preflight pass
+    through. Returns 429 with a short JSON body when over the limit.
+    """
+
+    def __init__(self, app, max_per_hour: int):
+        self.app = app
+        self.max = max_per_hour
+        self._hits: dict[str, deque] = {}
+
+    def _client_ip(self, scope) -> str:
+        headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
+        xri = headers.get("x-real-ip")
+        if xri:
+            return xri.strip()
+        xff = headers.get("x-forwarded-for")
+        if xff:
+            return xff.split(",")[0].strip()
+        client = scope.get("client")
+        return client[0] if client else "unknown"
+
+    def _over_limit(self, ip: str) -> bool:
+        now = time.time()
+        bucket = self._hits.setdefault(ip, deque())
+        while bucket and now - bucket[0] > 3600:
+            bucket.popleft()
+        if len(bucket) >= self.max:
+            return True
+        bucket.append(now)
+        return False
+
+    async def __call__(self, scope, receive, send):
+        if (self.max > 0 and scope.get("type") == "http"
+                and scope.get("method") == "POST"
+                and scope.get("path", "").rstrip("/") == "/api/chat"):
+            ip = self._client_ip(scope)
+            if self._over_limit(ip):
+                body = json.dumps({
+                    "error": "rate_limited",
+                    "message": f"Too many requests. Limit is {self.max} per hour. "
+                               "Please slow down and try again later.",
+                }).encode()
+                await send({
+                    "type": "http.response.start",
+                    "status": 429,
+                    "headers": [
+                        (b"content-type", b"application/json"),
+                        (b"retry-after", b"3600"),
+                    ],
+                })
+                await send({"type": "http.response.body", "body": body})
+                return
+        await self.app(scope, receive, send)
+
+
+app.add_middleware(_ChatRateLimit, max_per_hour=CHAT_MAX_PER_HOUR)
 
 _ROUTE_SYSTEM = (
     "You are the front-end of leagleLM, a US legal RESEARCH engine grounded in real "
