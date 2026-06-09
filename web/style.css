@@ -197,6 +197,30 @@ html, body {
 .answer.clarify { border-left: 3px solid var(--accent); background: var(--accent-soft); }
 .answer.note { color: var(--muted); font-size: 13px; }
 
+/* Final answer rendered from Markdown (streaming uses plain pre-wrap above). */
+.answer.rendered { white-space: normal; }
+.answer.rendered > :first-child { margin-top: 0; }
+.answer.rendered > :last-child { margin-bottom: 0; }
+.answer.rendered p { margin: 0 0 10px; }
+.answer.rendered ul, .answer.rendered ol { margin: 0 0 10px; padding-left: 22px; }
+.answer.rendered li { margin: 3px 0; }
+.answer.rendered h3, .answer.rendered h4 { font-size: 14.5px; font-weight: 700; margin: 13px 0 6px; }
+.answer.rendered strong { font-weight: 700; }
+.answer.rendered em { font-style: italic; }
+.answer.rendered code {
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 4px;
+  padding: 0 4px; font-size: 12.5px; font-family: ui-monospace, monospace;
+}
+
+/* Copy-answer action */
+.answer-actions { display: flex; justify-content: flex-end; margin-top: 8px; }
+.copy-btn {
+  background: var(--panel); border: 1px solid var(--line); color: var(--muted);
+  border-radius: 8px; padding: 5px 12px; font-size: 12px; cursor: pointer;
+}
+.copy-btn:hover { border-color: var(--accent); color: var(--accent-2); }
+.copy-btn.copied { color: var(--good); border-color: var(--good); }
+
 /* ── Composer ─────────────────────────────────────────────────── */
 .composer {
   display: flex; gap: 10px; align-items: flex-end;

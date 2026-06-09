@@ -14,9 +14,12 @@ const API_BASE = (
 ).replace(/\/$/, '');
 
 const chat = document.getElementById('chat');
+// Snapshot the intro/landing markup at load so "New research" can restore it.
+const INTRO_HTML = chat.innerHTML;
 const form = document.getElementById('composer');
 const input = document.getElementById('input');
 const sendBtn = document.getElementById('send');
+const DEFAULT_PLACEHOLDER = 'Ask in plain English…  (e.g. wrongful termination after reporting safety violations)';
 
 const messages = []; // conversation history: {role, content}
 let turnSeq = 0;
@@ -31,10 +34,59 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-// Turn [1], [2] … into clickable references scoped to this turn's case list.
+// Citation linking: [1],[2] → case refs; [R1],[R2] → statute/regulation refs.
+// Each becomes a clickable chip scoped to this turn's authority lists.
+function linkifyCites(s, turnId) {
+  return s
+    .replace(/\[(\d{1,2})\]/g, (m, n) =>
+      `<span class="cite-ref" data-kind="case" data-turn="${turnId}" data-n="${n}">[${n}]</span>`)
+    .replace(/\[R(\d{1,2})\]/g, (m, n) =>
+      `<span class="cite-ref" data-kind="statute" data-turn="${turnId}" data-n="${n}">[R${n}]</span>`);
+}
+
+// Streaming render: escape + link citations; shown pre-wrap while tokens arrive.
 function renderWithCites(text, turnId) {
-  return escapeHtml(text).replace(/\[(\d{1,2})\]/g, (m, n) =>
-    `<span class="cite-ref" data-turn="${turnId}" data-n="${n}">[${n}]</span>`);
+  return linkifyCites(escapeHtml(text), turnId);
+}
+
+// Inline markdown on already-escaped text: bold, italic, inline code, + citations.
+function renderInline(s, turnId) {
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+       .replace(/(^|[^*])\*(?!\s)([^*\n]+?)\*(?!\*)/g, '$1<em>$2</em>')
+       .replace(/`([^`]+)`/g, '<code>$1</code>');
+  return linkifyCites(s, turnId);
+}
+
+// Minimal, safe Markdown → HTML for the final answer. Escapes first (no raw HTML
+// from the model or case text ever reaches the DOM), then builds paragraphs,
+// bullet/numbered lists and headings with inline formatting + clickable cites.
+function renderMarkdown(text, turnId) {
+  const lines = escapeHtml(text).split('\n');
+  let html = '', listType = null, para = [];
+  const closeList = () => { if (listType) { html += `</${listType}>`; listType = null; } };
+  const flushPara = () => { if (para.length) { html += `<p>${renderInline(para.join(' '), turnId)}</p>`; para = []; } };
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) { flushPara(); closeList(); continue; }
+    let m;
+    if ((m = line.match(/^(#{1,4})\s+(.*)$/))) {
+      flushPara(); closeList();
+      const lvl = Math.min(m[1].length + 2, 4);
+      html += `<h${lvl}>${renderInline(m[2], turnId)}</h${lvl}>`;
+    } else if ((m = line.match(/^[-*•]\s+(.*)$/))) {
+      flushPara();
+      if (listType !== 'ul') { closeList(); html += '<ul>'; listType = 'ul'; }
+      html += `<li>${renderInline(m[1], turnId)}</li>`;
+    } else if ((m = line.match(/^\d+[.)]\s+(.*)$/))) {
+      flushPara();
+      if (listType !== 'ol') { closeList(); html += '<ol>'; listType = 'ol'; }
+      html += `<li>${renderInline(m[1], turnId)}</li>`;
+    } else {
+      closeList(); para.push(line);
+    }
+  }
+  flushPara(); closeList();
+  return html;
 }
 
 function scrollDown() { chat.scrollTop = chat.scrollHeight; }
@@ -84,7 +136,8 @@ function newBotTurn() {
       <div class="auth-head">Federal Statutes &amp; Regulations <span class="cnt"></span></div>
       <div class="statlist"></div>
     </div>
-    <div class="answer" style="display:none"></div>`;
+    <div class="answer" style="display:none"></div>
+    <div class="answer-actions" style="display:none"><button type="button" class="copy-btn">⧉ Copy</button></div>`;
   chat.appendChild(el);
   setStep(el, 'analyze', 'active');
   scrollDown();
@@ -99,6 +152,7 @@ function newBotTurn() {
     statCnt: el.querySelector('.statutes .cnt'),
     statListEl: el.querySelector('.statlist'),
     answerEl: el.querySelector('.answer'),
+    actionsEl: el.querySelector('.answer-actions'),
   };
 }
 
@@ -134,11 +188,12 @@ function renderCases(casesEl, turnId, cases) {
   });
 }
 
-function renderStatutes(listEl, statutes) {
+function renderStatutes(listEl, turnId, statutes) {
   listEl.innerHTML = '';
   statutes.forEach((s, i) => {
     const card = document.createElement('div');
     card.className = 'statute';
+    card.id = `statute-${turnId}-${i + 1}`;
     card.innerHTML = `
       <div class="row1"><span class="rnum">R${i + 1}</span><span class="title">${escapeHtml(s.citation)}</span><span class="verified">Verified</span></div>
       ${s.heading ? `<div class="meta">${escapeHtml(s.heading)}</div>` : ''}
@@ -148,16 +203,30 @@ function renderStatutes(listEl, statutes) {
   });
 }
 
-// Click a [n] reference -> highlight the matching case card.
+// Click a [n] / [Rn] reference -> highlight the matching authority card.
 chat.addEventListener('click', (e) => {
   const ref = e.target.closest('.cite-ref');
   if (!ref) return;
-  const card = document.getElementById(`case-${ref.dataset.turn}-${ref.dataset.n}`);
+  const prefix = ref.dataset.kind === 'statute' ? 'statute' : 'case';
+  const card = document.getElementById(`${prefix}-${ref.dataset.turn}-${ref.dataset.n}`);
   if (card) {
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     card.style.borderColor = 'var(--accent)';
     setTimeout(() => { card.style.borderColor = ''; }, 1200);
   }
+});
+
+// Copy a turn's reasoning to the clipboard.
+chat.addEventListener('click', (e) => {
+  const btn = e.target.closest('.copy-btn');
+  if (!btn) return;
+  const ans = btn.closest('.turn')?.querySelector('.answer');
+  const text = ans ? ans.innerText.trim() : '';
+  if (!text || !navigator.clipboard) return;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.classList.add('copied'); btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.classList.remove('copied'); btn.textContent = '⧉ Copy'; }, 1500);
+  }).catch(() => {});
 });
 
 async function send(text) {
@@ -227,7 +296,7 @@ async function send(text) {
           if (obj.count) {
             t.statEl.style.display = '';
             t.statCnt.textContent = '· ' + obj.count;
-            renderStatutes(t.statListEl, obj.statutes || []);
+            renderStatutes(t.statListEl, t.turnId, obj.statutes || []);
           }
           scrollDown();
         } else if (ev === 'token') {
@@ -243,6 +312,12 @@ async function send(text) {
         } else if (ev === 'done') {
           if (!clarified) setStep(t.el, 'answer', 'done', true);
           t.statusEl.style.display = 'none';
+          // Final pass: render the streamed answer as Markdown and expose Copy.
+          if (answerRaw.trim()) {
+            t.answerEl.className = 'answer rendered';
+            t.answerEl.innerHTML = renderMarkdown(answerRaw, t.turnId);
+            t.actionsEl.style.display = '';
+          }
         }
       }
     }
@@ -274,8 +349,25 @@ input.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
 });
 
-document.querySelectorAll('.ex').forEach((b) =>
-  b.addEventListener('click', () => { send(b.textContent); }));
+// ── Examples + New research ──────────────────────────────────────
+function bindExamples() {
+  document.querySelectorAll('.ex').forEach((b) =>
+    b.addEventListener('click', () => { currentMode = 'chat'; send(b.textContent); }));
+}
+bindExamples();
+
+// Start a fresh research session: clear the conversation and restore the intro.
+function newResearch() {
+  if (busy) return;
+  messages.length = 0;
+  turnSeq = 0;
+  currentMode = 'chat';
+  chat.innerHTML = INTRO_HTML;
+  bindExamples();
+  input.placeholder = DEFAULT_PLACEHOLDER;
+  input.value = ''; input.style.height = 'auto';
+  input.focus();
+}
 
 // ── Sidebar: mobile drawer ───────────────────────────────────────
 const app = document.querySelector('.app');
@@ -321,14 +413,15 @@ document.querySelectorAll('.nav-item').forEach((b) => {
   b.addEventListener('click', () => {
     document.querySelectorAll('.nav-item').forEach((x) => x.classList.remove('active'));
     b.classList.add('active');
+    // The leagleLM entry (data-action="new") starts a fresh reasoning session.
+    if (b.dataset.action === 'new') { newResearch(); closeNav(); return; }
     const tool = b.dataset.tool;
-    // Toolkit entry -> direct precise search in that mode. The leagleLM entry
-    // (data-action="new") goes back to the full conversational reasoning flow.
+    // Toolkit entry -> direct precise search in that mode.
     currentMode = (tool && TOOL_HINTS[tool]) ? tool : 'chat';
     if (tool && TOOL_HINTS[tool]) {
       input.placeholder = TOOL_HINTS[tool];
     } else {
-      input.placeholder = 'Ask in plain English…  (e.g. wrongful termination after reporting safety violations)';
+      input.placeholder = DEFAULT_PLACEHOLDER;
     }
     input.focus();
     closeNav();
