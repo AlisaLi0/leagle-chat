@@ -7,6 +7,8 @@ citations and links. Mirrors the legal-mcp source but standalone (no MCP deps).
 from __future__ import annotations
 
 import asyncio
+import re
+import unicodedata
 from dataclasses import dataclass, field
 
 import httpx
@@ -43,6 +45,12 @@ class Case:
     cited_by: int | None = None
     last_cited: str = ""
     treatment: str = ""  # one of: "", "landmark", "frequently-cited", "cited", "rarely-cited"
+    # Negative-treatment signal: number of later opinions that cite this case
+    # AND contain overruling language, plus a few examples. This is a heuristic
+    # search signal (NOT an authoritative Shepard's/KeyCite check); None means
+    # not checked.
+    negative_count: int | None = None
+    negative_examples: list = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return {
@@ -59,6 +67,8 @@ class Case:
             "cited_by": self.cited_by,
             "last_cited": self.last_cited,
             "treatment": self.treatment,
+            "negative_count": self.negative_count,
+            "negative_examples": self.negative_examples,
         }
 
 
@@ -112,6 +122,35 @@ def _treatment_label(cited_by: int) -> str:
     if cited_by >= 5:
         return "cited"
     return "rarely-cited"
+
+
+# Words that, when a later opinion both cites a case AND uses them, suggest the
+# case may have been treated negatively. Used only as tight name-anchored
+# phrases (e.g. "overruled Miranda"), never as bare terms - bare "overruled"
+# matches almost every citing opinion and is useless as a signal.
+def _normalize_for_match(text: str) -> str:
+    """Normalize text for robust quote matching.
+
+    Lowercases, converts smart quotes/dashes to ASCII, drops most punctuation,
+    and collapses all whitespace to single spaces. This lets a quote match the
+    opinion text despite typographic differences (curly vs straight quotes,
+    line breaks, page-number artifacts in the middle of a sentence are NOT
+    removed, but spacing/quoting differences are).
+    """
+    text = unicodedata.normalize("NFKD", text or "")
+    # Smart quotes / dashes -> ASCII.
+    trans = {
+        "\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"',
+        "\u2013": "-", "\u2014": "-", "\u2026": "...", "\xa0": " ",
+    }
+    text = text.translate({ord(k): v for k, v in trans.items()})
+    text = text.lower()
+    # Drop punctuation except intra-word apostrophes/hyphens are fine to drop too
+    # for matching purposes; we only care about word content + order.
+    text = re.sub(r"[^a-z0-9\s]", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
 
 
 def _build_query(query: str, mode: str) -> str:
@@ -242,6 +281,173 @@ class CourtListener:
             c.cited_by = count
             c.last_cited = last
             c.treatment = _treatment_label(count)
+
+    async def negative_treatment(self, cluster_id: str, case_name: str = "") -> tuple[int, list[dict]]:
+        """Heuristic negative-treatment signal for a case.
+
+        Searches for later opinions that cite this case AND use overruling
+        language *directed at this case by name* (e.g. "overruled Miranda"),
+        rather than merely containing the word "overruled" somewhere (which is
+        far too common - most opinions discuss some other case being overruled).
+        A non-zero count is a flag to investigate; it does NOT prove the case is
+        bad law (a hit could be "we decline to overrule Miranda"). Returns
+        (count, examples) where examples is a short list of {title, date, url}.
+
+        Degrades to (0, []) on any error so it never blocks the main answer.
+        """
+        cid = str(cluster_id or "").strip()
+        if not cid.isdigit():
+            return 0, []
+        # Anchor on the FULL caption ("Miranda v. Arizona"), not just the first
+        # party ("Miranda") - many party names (Miranda, Smith, Brown) are common
+        # surnames, so a one-word anchor matches unrelated cases. Require the full
+        # "X v. Y" form so the overruling language is plausibly about THIS case.
+        caption = (case_name or "").strip()
+        m = re.match(r"(.+?\sv\.?\s.+?)(?:\s*,|\s*\(|$)", caption)
+        if not m:
+            return 0, []
+        full = re.sub(r"[^A-Za-z .'-]", "", m.group(1)).strip()
+        # Need both parties present and a reasonable length to be distinctive.
+        if " v" not in f" {full.lower()} " or len(full) < 7:
+            return 0, []
+        phrases = [
+            f'"overruled {full}"', f'"overruling {full}"', f'"overrule {full}"',
+            f'"{full} is overruled"', f'"{full} was overruled"',
+            f'"{full} has been overruled"', f'"abrogated {full}"',
+            f'"{full} is no longer good law"',
+        ]
+        q = f"cites:({cid}) AND (" + " OR ".join(phrases) + ")"
+        try:
+            data = await self._get(
+                "/search/", {"q": q, "type": "o", "order_by": "dateFiled desc"})
+        except Exception:
+            return 0, []
+        count = int(data.get("count") or 0)
+        examples: list[dict] = []
+        for r in (data.get("results") or [])[:3]:
+            abs_url = r.get("absolute_url") or ""
+            examples.append({
+                "title": r.get("caseName") or r.get("caseNameFull") or "(untitled)",
+                "date": (r.get("dateFiled") or "")[:10],
+                "url": f"{CL_WEB}{abs_url}" if abs_url else "",
+            })
+        return count, examples
+
+    async def attach_negative(self, cases: list[Case], *, top: int = 3) -> None:
+        """Populate negative_count / negative_examples for the first `top` cases,
+        concurrently. Mutates in place. Best-effort: failures leave it unset.
+        """
+        targets = [c for c in cases[:top] if str(c.id).isdigit()]
+        if not targets:
+            return
+        results = await asyncio.gather(
+            *(self.negative_treatment(c.id, c.title) for c in targets),
+            return_exceptions=True,
+        )
+        for c, res in zip(targets, results):
+            if isinstance(res, Exception):
+                continue
+            count, examples = res
+            c.negative_count = count
+            c.negative_examples = examples
+
+    async def opinion_text(self, cluster_id: str) -> str:
+        """Fetch the full opinion text for a cluster.
+
+        Resolves the cluster's sub-opinions and concatenates their plain text
+        (falling back to stripped HTML). Returns "" if unavailable. Detail
+        endpoints work anonymously for most opinions; a token raises limits.
+        """
+        cid = str(cluster_id or "").strip()
+        if not cid.isdigit():
+            return ""
+        try:
+            cluster = await self._get(f"/clusters/{cid}/", {})
+        except httpx.HTTPError:
+            return ""
+        sub = cluster.get("sub_opinions") or []
+        # sub_opinions are absolute API URLs; extract the trailing opinion id.
+        # Cap the number fetched: the lead opinion plus a few concurrences/
+        # dissents is enough to verify a quote, and it bounds load (each opinion
+        # can be hundreds of KB, and fetching all of a landmark's sub-opinions
+        # at once invites rate limiting).
+        op_ids: list[str] = []
+        for u in sub:
+            m = re.search(r"/opinions/(\d+)/", str(u))
+            if m:
+                op_ids.append(m.group(1))
+            if len(op_ids) >= 4:
+                break
+        if not op_ids:
+            return ""
+        texts = await asyncio.gather(
+            *(self._get(f"/opinions/{oid}/", {}) for oid in op_ids),
+            return_exceptions=True,
+        )
+        parts: list[str] = []
+        for t in texts:
+            if isinstance(t, Exception) or not isinstance(t, dict):
+                continue
+            body = (t.get("plain_text") or "").strip()
+            if not body:
+                html = t.get("html_with_citations") or t.get("html") or t.get("xml_harvard") or ""
+                body = re.sub(r"<[^>]+>", " ", html)
+                body = re.sub(r"\s+", " ", body).strip()
+            if body:
+                parts.append(body)
+        return "\n\n".join(parts)
+
+    async def verify_quote(self, cluster_id: str, quote: str) -> dict:
+        """Check whether `quote` actually appears in the opinion's real text.
+
+        This is leagle's anti-hallucination check: given a quote a user (or a
+        model) attributes to a case, we fetch the REAL opinion text and confirm
+        the words are there - returning the surrounding context when found, so
+        the user can see it in situ. Matching is whitespace/punctuation/quote
+        insensitive (normalized), so typographic differences don't cause false
+        misses.
+
+        Returns: {found: bool, match: "exact"|"normalized"|"not_found"|"no_text",
+                  context: str, quote: str, cluster_id: str, chars: int}.
+        """
+        q_raw = (quote or "").strip()
+        out = {"found": False, "match": "not_found", "context": "",
+               "quote": q_raw, "cluster_id": str(cluster_id or ""), "chars": 0}
+        if len(q_raw) < 6:
+            out["match"] = "too_short"
+            return out
+        text = await self.opinion_text(cluster_id)
+        if not text:
+            out["match"] = "no_text"
+            return out
+        out["chars"] = len(text)
+        # 1) Exact substring (case-insensitive) -> strongest confirmation.
+        lo_text, lo_q = text.lower(), q_raw.lower()
+        idx = lo_text.find(lo_q)
+        if idx >= 0:
+            out.update(found=True, match="exact",
+                       context=self._context(text, idx, len(q_raw)))
+            return out
+        # 2) Normalized match (ignore whitespace/punctuation/smart-quote diffs).
+        norm_text = _normalize_for_match(text)
+        norm_q = _normalize_for_match(q_raw)
+        if norm_q and norm_q in norm_text:
+            # Map back approximately: find the first word of the quote in raw text.
+            first = norm_q.split(" ")[0]
+            approx = text.lower().find(first)
+            ctx = self._context(text, max(approx, 0), len(q_raw)) if approx >= 0 else ""
+            out.update(found=True, match="normalized", context=ctx)
+            return out
+        return out
+
+    @staticmethod
+    def _context(text: str, idx: int, qlen: int, *, pad: int = 160) -> str:
+        """A readable window of the opinion around a matched quote."""
+        start = max(0, idx - pad)
+        end = min(len(text), idx + qlen + pad)
+        snippet = text[start:end].strip()
+        snippet = re.sub(r"\s+", " ", snippet)
+        return ("…" if start > 0 else "") + snippet + ("…" if end < len(text) else "")
 
     def _parse(self, r: dict) -> Case:
         abs_url = r.get("absolute_url") or ""
