@@ -245,6 +245,7 @@ async function send(text) {
   try {
     const resp = await fetch(API_BASE + '/api/chat', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages, mode: currentMode }),
     });
@@ -330,6 +331,8 @@ async function send(text) {
 
   messages.push({ role: 'assistant', content: clarified || answerRaw || '(cases shown)' });
   busy = false; sendBtn.disabled = false;
+  // Persist the thread to the account when signed in (durable, cross-device).
+  autosaveSession();
   input.focus();
 }
 
@@ -362,6 +365,7 @@ function newResearch() {
   messages.length = 0;
   turnSeq = 0;
   currentMode = 'chat';
+  currentSessionId = null;
   chat.innerHTML = INTRO_HTML;
   bindExamples();
   input.placeholder = DEFAULT_PLACEHOLDER;
@@ -377,30 +381,178 @@ app.addEventListener('click', (e) => {
   if (app.classList.contains('nav-open') && !e.target.closest('.sidebar') && !e.target.closest('.hamburger')) closeNav();
 });
 
-// ── Sidebar: research history (localStorage) ─────────────────────
+// ── Account + research history (backend when signed in, else localStorage) ──
+// Signed-in users get durable, cross-device research history stored on their
+// account; signed-out users get a local-only recent list (localStorage). The
+// account block offers OAuth sign-in (only the providers the server has
+// configured) and sign-out.
 const HKEY = 'leagle-history';
 const historyEl = document.getElementById('history');
-function loadHistory() { try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch { return []; } }
-function saveHistory(arr) { try { localStorage.setItem(HKEY, JSON.stringify(arr.slice(0, 30))); } catch (e) { /* ignore */ } }
+const accountEl = document.getElementById('account');
+let me = null;                 // current signed-in user, or null
+let providers = [];            // configured OAuth providers, e.g. ['github']
+let currentSessionId = null;   // backend id of the active thread (when signed in)
+
+function api(path, opts = {}) {
+  return fetch(API_BASE + path, { credentials: 'include', ...opts });
+}
+
+const PROVIDER_LABEL = { github: 'GitHub', google: 'Google' };
+
+function renderAccount() {
+  if (!accountEl) return;
+  if (me) {
+    const initial = (me.name || me.email || '?').trim().charAt(0).toUpperCase();
+    const avatar = me.avatar_url
+      ? `<img class="acc-avatar" src="${escapeHtml(me.avatar_url)}" alt="" />`
+      : `<span class="acc-avatar acc-initial">${escapeHtml(initial)}</span>`;
+    accountEl.innerHTML = `
+      <div class="acc-user">
+        ${avatar}
+        <div class="acc-meta">
+          <div class="acc-name">${escapeHtml(me.name || me.email || 'Signed in')}</div>
+          <div class="acc-plan">${escapeHtml(me.plan || 'free')} plan</div>
+        </div>
+        <button class="acc-logout" id="logoutBtn" title="Sign out">⎋</button>
+      </div>`;
+    document.getElementById('logoutBtn').addEventListener('click', logout);
+  } else if (providers.length) {
+    const btns = providers.map((p) =>
+      `<button class="acc-signin" data-provider="${p}">
+         <span class="acc-ico">${p === 'github' ? '⌥' : '◉'}</span>
+         Sign in with ${PROVIDER_LABEL[p] || p}
+       </button>`).join('');
+    accountEl.innerHTML = `
+      <div class="acc-signin-wrap">
+        <div class="acc-hint">Sign in to save your research across devices.</div>
+        ${btns}
+      </div>`;
+    accountEl.querySelectorAll('.acc-signin').forEach((b) =>
+      b.addEventListener('click', () => {
+        const next = encodeURIComponent(location.href);
+        location.href = `${API_BASE}/api/auth/${b.dataset.provider}/start?next=${next}`;
+      }));
+  } else {
+    accountEl.innerHTML = '';
+  }
+}
+
+async function loadAuth() {
+  try {
+    const [meResp, provResp] = await Promise.all([
+      api('/api/auth/me'),
+      api('/api/auth/providers'),
+    ]);
+    me = meResp.ok ? await meResp.json() : null;
+    providers = provResp.ok ? (await provResp.json()).providers || [] : [];
+  } catch {
+    me = null; providers = [];
+  }
+  renderAccount();
+  refreshHistory();
+}
+
+async function logout() {
+  try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
+  me = null; currentSessionId = null;
+  renderAccount();
+  refreshHistory();
+}
+
+// Local (signed-out) history helpers.
+function loadLocal() { try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch { return []; } }
+function saveLocal(arr) { try { localStorage.setItem(HKEY, JSON.stringify(arr.slice(0, 30))); } catch (e) { /* ignore */ } }
+
 function pushHistory(q) {
-  const arr = loadHistory().filter((x) => x.q !== q);
+  if (me) return;            // signed-in history is saved server-side via autosave
+  const arr = loadLocal().filter((x) => x.q !== q);
   arr.unshift({ q, t: Date.now() });
-  saveHistory(arr);
+  saveLocal(arr);
   renderHistory();
 }
-function renderHistory() {
-  const arr = loadHistory();
-  historyEl.innerHTML = '';
-  arr.forEach((x) => {
-    const b = document.createElement('button');
-    b.className = 'hist-item';
-    b.title = x.q;
-    b.innerHTML = `<span class="ht-type">Research</span>${escapeHtml(x.q)}`;
-    b.addEventListener('click', () => { closeNav(); currentMode = 'chat'; send(x.q); });
-    historyEl.appendChild(b);
-  });
+
+async function refreshHistory() {
+  if (me) {
+    let sessions = [];
+    try {
+      const r = await api('/api/sessions');
+      if (r.ok) sessions = (await r.json()).sessions || [];
+    } catch { /* ignore */ }
+    renderHistory(sessions);
+  } else {
+    renderHistory();
+  }
 }
-renderHistory();
+
+function renderHistory(sessions) {
+  historyEl.innerHTML = '';
+  if (me) {
+    (sessions || []).forEach((s) => {
+      const b = document.createElement('button');
+      b.className = 'hist-item';
+      b.title = s.title;
+      b.innerHTML = `<span class="ht-type">Research</span>${escapeHtml(s.title)}`;
+      b.addEventListener('click', () => { closeNav(); openSession(s.id); });
+      historyEl.appendChild(b);
+    });
+  } else {
+    loadLocal().forEach((x) => {
+      const b = document.createElement('button');
+      b.className = 'hist-item';
+      b.title = x.q;
+      b.innerHTML = `<span class="ht-type">Research</span>${escapeHtml(x.q)}`;
+      b.addEventListener('click', () => { closeNav(); currentMode = 'chat'; send(x.q); });
+      historyEl.appendChild(b);
+    });
+  }
+}
+
+// Auto-save the active thread to the account after each completed turn.
+async function autosaveSession() {
+  if (!me || !messages.length) return;
+  const title = (messages.find((m) => m.role === 'user') || {}).content || 'Research';
+  try {
+    const r = await api('/api/sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: currentSessionId, title: title.slice(0, 120), payload: messages }),
+    });
+    if (r.ok) { currentSessionId = (await r.json()).id; refreshHistory(); }
+  } catch { /* ignore */ }
+}
+
+// Open a saved thread: load its transcript and render it read-only.
+async function openSession(sessionId) {
+  if (busy) return;
+  let data;
+  try {
+    const r = await api('/api/sessions/' + sessionId);
+    if (!r.ok) return;
+    data = await r.json();
+  } catch { return; }
+  messages.length = 0;
+  turnSeq = 0;
+  currentSessionId = sessionId;
+  currentMode = 'chat';
+  chat.innerHTML = '';
+  (data.payload || []).forEach((m) => {
+    if (m.role === 'user') {
+      addUser(m.content);
+      messages.push({ role: 'user', content: m.content });
+    } else if (m.role === 'assistant') {
+      const el = document.createElement('div');
+      el.className = 'turn bot';
+      el.dataset.turn = ++turnSeq;
+      el.innerHTML = `<div class="answer rendered">${renderMarkdown(m.content, turnSeq)}</div>`;
+      chat.appendChild(el);
+      messages.push({ role: 'assistant', content: m.content });
+    }
+  });
+  scrollDown();
+  input.focus();
+}
+
+loadAuth();
 
 // ── Sidebar: nav items + research toolkit ────────────────────────
 const TOOL_HINTS = {

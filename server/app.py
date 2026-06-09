@@ -29,13 +29,14 @@ from collections.abc import AsyncIterator
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
 from .courtlistener import CourtListener
 from .statutes import ECFR, USCode
 from . import llm
+from . import db, auth
 
 HOST = os.getenv("LEAGLE_HOST", "127.0.0.1")
 PORT = int(os.getenv("LEAGLE_PORT", "8600"))
@@ -52,12 +53,21 @@ CHAT_MAX_PER_HOUR = int(os.getenv("LEAGLE_CHAT_MAX_PER_HOUR", "30"))
 cl = CourtListener(api_token=os.getenv("COURTLISTENER_API_TOKEN"))
 ecfr = ECFR()
 uscode = USCode(os.getenv("GOVINFO_API_KEY", ""))
+db.init_db()
 app = FastAPI(title="leagle-chat")
 
+# Credentialed (cookie) auth only works same-origin or with an explicit origin
+# allow-list — the CORS spec forbids credentials with a "*" origin. The login /
+# saved-sessions UI is served same-origin from the backend (no CORS involved);
+# the wildcard cross-origin path (e.g. the GitHub Pages demo) stays read-only
+# and uncredentialed.
+_cors_origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+_allow_credentials = _cors_origins != ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in CORS_ORIGINS.split(",") if o.strip()],
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_origins=_cors_origins,
+    allow_credentials=_allow_credentials,
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type"],
 )
 
@@ -411,6 +421,118 @@ async def chat(request: Request):
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "llm": llm.LLM_BASE_URL, "model": llm.LLM_MODEL}
+
+
+# ── Authentication (OAuth sign-in + signed-cookie sessions) ─────────────────
+
+def _current_user(request: Request) -> db.User | None:
+    """Resolve the signed-in account from the session cookie, or None."""
+    uid = auth.user_id_from_cookie(request.cookies.get(auth.COOKIE_NAME))
+    return db.get_user(uid) if uid else None
+
+
+@app.get("/api/auth/providers")
+def auth_providers() -> dict:
+    """Which OAuth providers are configured (so the UI shows only those)."""
+    return {"providers": auth.configured_providers()}
+
+
+@app.get("/api/auth/me")
+def auth_me(request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    return user.to_public()
+
+
+@app.get("/api/auth/{provider}/start")
+def auth_start(provider: str, request: Request):
+    if provider not in auth.configured_providers():
+        return JSONResponse(status_code=404, content={"error": "provider_not_configured"})
+    next_url = request.query_params.get("next", "")
+    state = auth.make_state(provider, next_url)
+    resp = RedirectResponse(auth.authorize_url(provider, state), status_code=302)
+    # Echo state in a short-lived cookie too, to defend against CSRF on callback.
+    resp.set_cookie("leagle_oauth_state", state, max_age=600, httponly=True,
+                    secure=True, samesite="lax", path=auth.COOKIE_PATH)
+    return resp
+
+
+@app.get("/api/auth/{provider}/callback")
+async def auth_callback(provider: str, request: Request):
+    if provider not in auth.configured_providers():
+        return JSONResponse(status_code=404, content={"error": "provider_not_configured"})
+    code = request.query_params.get("code", "")
+    state = request.query_params.get("state", "")
+    cookie_state = request.cookies.get("leagle_oauth_state", "")
+    # CSRF: the state must verify AND match the one we set at /start.
+    if not code or not state or state != cookie_state or not auth.read_state(state, provider):
+        return JSONResponse(status_code=400, content={"error": "invalid_oauth_state"})
+    try:
+        user = await auth.exchange_code(provider, code)
+    except httpx.HTTPError:
+        user = None
+    if not user:
+        return JSONResponse(status_code=400, content={"error": "oauth_exchange_failed"})
+    state_data = auth.read_state(state, provider) or {}
+    dest = state_data.get("n") or (auth.PUBLIC_BASE + "/" if auth.PUBLIC_BASE else "/")
+    resp = RedirectResponse(dest, status_code=302)
+    resp.set_cookie(auth.COOKIE_NAME, auth.make_session_cookie(user.id),
+                    max_age=auth.COOKIE_MAX_AGE, httponly=True, secure=True,
+                    samesite="lax", path=auth.COOKIE_PATH)
+    resp.delete_cookie("leagle_oauth_state", path=auth.COOKIE_PATH)
+    return resp
+
+
+@app.post("/api/auth/logout")
+def auth_logout():
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(auth.COOKIE_NAME, path=auth.COOKIE_PATH)
+    return resp
+
+
+# ── Saved research sessions (per signed-in user) ────────────────────────────
+
+@app.get("/api/sessions")
+def sessions_list(request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    return {"sessions": db.list_sessions(user.id)}
+
+
+@app.get("/api/sessions/{session_id}")
+def sessions_get(session_id: str, request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    s = db.get_session(user.id, session_id)
+    if not s:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+    return s
+
+
+@app.post("/api/sessions")
+async def sessions_save(request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    body = await request.json()
+    payload = body.get("payload")
+    if not isinstance(payload, (list, dict)):
+        return JSONResponse(status_code=400, content={"error": "bad_payload"})
+    sid = db.save_session(user.id, session_id=body.get("id"),
+                          title=str(body.get("title") or "Untitled research"),
+                          payload=payload)
+    return {"id": sid}
+
+
+@app.delete("/api/sessions/{session_id}")
+def sessions_delete(session_id: str, request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    return {"ok": db.delete_session(user.id, session_id)}
 
 
 # Static frontend (mounted last so /api/* takes precedence).
