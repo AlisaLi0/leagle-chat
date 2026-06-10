@@ -34,6 +34,49 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
+// Only allow http(s) URLs (e.g. avatar images from OAuth providers). Rejects
+// javascript:/data: and other schemes so a hostile profile field can't inject
+// an active URL. Returns '' when the URL isn't a safe absolute http(s) link.
+function safeUrl(u) {
+  const s = String(u || '').trim();
+  if (!s) return '';
+  try {
+    const parsed = new URL(s, location.origin);
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed.href : '';
+  } catch {
+    return '';
+  }
+}
+
+// A same-origin "return here after sign-in" target (path only — never the full
+// URL, so it can't be turned into an off-site redirect).
+function selfNext() {
+  return encodeURIComponent(location.pathname + location.search + location.hash);
+}
+
+// Lightweight transient toast (top-center). Used for non-blocking notices like
+// a failed sign-in. Auto-dismisses; safe to call before DOM helpers exist.
+function showToast(msg, ms = 4000) {
+  try {
+    let host = document.getElementById('toastHost');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'toastHost';
+      host.className = 'toast-host';
+      document.body.appendChild(host);
+    }
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = String(msg || '');
+    host.appendChild(el);
+    requestAnimationFrame(() => el.classList.add('show'));
+    setTimeout(() => {
+      el.classList.remove('show');
+      setTimeout(() => el.remove(), 300);
+    }, ms);
+  } catch { /* ignore */ }
+}
+
 // Citation linking: [1],[2] → case refs; [R1],[R2] → statute/regulation refs.
 // Each becomes a clickable chip scoped to this turn's authority lists.
 function linkifyCites(s, turnId) {
@@ -175,7 +218,7 @@ function renderCases(casesEl, turnId, cases) {
         'rarely-cited': 'Rarely cited',
       }[c.treatment] || 'Cited';
       const recent = c.last_cited ? `, latest ${escapeHtml(c.last_cited)}` : '';
-      cyt = `<span class="cytator cyt-${escapeHtml(c.treatment || 'cited')}" title="Cited by ${c.cited_by} later opinions${recent}. Citation-frequency signal, not a negative-history (overruled) check.">▣ ${label} · cited by ${c.cited_by}${recent}</span>`;
+      cyt = `<span class="cytator cyt-${escapeHtml(c.treatment || 'cited')}" title="Cited by ${c.cited_by} later opinions${recent}. Heuristic citation-frequency signal only — NOT an authoritative good-law check (Shepard's/KeyCite) and not a negative-history (overruled) check. Always read the opinion before relying on it.">▣ ${label} · cited by ${c.cited_by}${recent}</span>`;
     }
     card.innerHTML = `
       <div class="row1"><span class="num">${n}</span><span class="title">${escapeHtml(c.title)}</span><span class="verified">Verified</span></div>
@@ -297,14 +340,26 @@ chat.addEventListener('click', async (e) => {
       body: JSON.stringify({ cluster_id: clusterId, quote }),
     });
     if (resp.status === 401) { me = null; renderAccount(); openLoginModal(); out.textContent = ''; return; }
+    if (resp.status === 429) {
+      let info = {}; try { info = await resp.json(); } catch { /* ignore */ }
+      out.className = 'verify-result vr-warn';
+      out.textContent = '⚠ ' + (info.message || 'Too many checks too fast — please wait a moment.');
+      return;
+    }
     const r = await resp.json();
     if (r.found) {
       out.className = 'verify-result vr-ok';
-      out.innerHTML = `<strong>✓ Found in the opinion</strong> (${r.match} match).` +
+      out.innerHTML = `<strong>✓ Found in the opinion</strong> (${escapeHtml(r.match)} match).` +
         (r.context ? `<div class="vr-ctx">…${escapeHtml(r.context)}…</div>` : '');
     } else if (r.match === 'no_text') {
       out.className = 'verify-result vr-warn';
       out.textContent = '⚠ The full opinion text isn\'t available to check this quote.';
+    } else if (r.partial) {
+      // We couldn't search every sub-opinion, so "not found" isn't conclusive.
+      out.className = 'verify-result vr-warn';
+      out.textContent = `⚠ Not found in the ${r.opinions_searched} of `
+        + `${r.opinions_total} opinions we could search — it may appear in another. `
+        + 'Treat as unconfirmed and open the full opinion to check.';
     } else {
       out.className = 'verify-result vr-miss';
       out.textContent = '✗ Not found in this opinion\'s text — treat the quote as unverified.';
@@ -336,12 +391,24 @@ async function send(text) {
   let answerRaw = '';
   let clarified = '';
 
+  // Abort the stream if it stalls (no bytes) for too long, so a wedged
+  // connection surfaces as a clear error instead of an endless spinner. The
+  // timer is pushed forward on every chunk received.
+  const STREAM_IDLE_MS = 60000;
+  const ctrl = new AbortController();
+  let idleTimer = setTimeout(() => ctrl.abort('timeout'), STREAM_IDLE_MS);
+  const bumpIdle = () => {
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => ctrl.abort('timeout'), STREAM_IDLE_MS);
+  };
+
   try {
     const resp = await fetch(API_BASE + '/api/chat', {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ messages, mode: currentMode }),
+      signal: ctrl.signal,
     });
     // Session expired (or never signed in): drop back to the sign-in gate and
     // re-queue this question so it's ready after they authenticate.
@@ -363,6 +430,22 @@ async function send(text) {
       openUpgradeModal(info);
       return;
     }
+    // Rate limited (too many requests too fast): ask them to slow down rather
+    // than burning the turn or showing a raw error.
+    if (resp.status === 429) {
+      let info = {};
+      try { info = await resp.json(); } catch { /* ignore */ }
+      clearTimeout(idleTimer);
+      setStep(t.el, 'analyze', 'done');
+      t.statusEl.style.display = 'none';
+      t.answerEl.style.display = '';
+      t.answerEl.className = 'answer note';
+      t.answerEl.textContent = info.message
+        || 'You\'re sending requests a little too fast. Please wait a moment and try again.';
+      messages.pop();
+      busy = false; sendBtn.disabled = false;
+      return;
+    }
     if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
 
     const reader = resp.body.getReader();
@@ -372,6 +455,7 @@ async function send(text) {
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
+      bumpIdle();
       buf += decoder.decode(value, { stream: true });
       let idx;
       while ((idx = buf.indexOf('\n\n')) >= 0) {
@@ -424,7 +508,18 @@ async function send(text) {
           t.answerEl.style.display = '';
           t.answerEl.className = 'answer note';
           t.answerEl.textContent = obj.message || 'Something went wrong.';
+        } else if (ev === 'warning') {
+          // Non-fatal advisory (e.g. a citation-integrity check). Show it as a
+          // distinct caution note above/with the answer without replacing it.
+          let warn = t.el.querySelector('.answer-warn');
+          if (!warn) {
+            warn = document.createElement('div');
+            warn.className = 'answer-warn';
+            t.answerEl.insertAdjacentElement('beforebegin', warn);
+          }
+          warn.textContent = '⚠ ' + (obj.message || 'Please double-check the citations.');
         } else if (ev === 'done') {
+          clearTimeout(idleTimer);
           if (!clarified) setStep(t.el, 'answer', 'done', true);
           t.statusEl.style.display = 'none';
           // Final pass: render the streamed answer as Markdown and expose Copy.
@@ -437,10 +532,17 @@ async function send(text) {
       }
     }
   } catch (err) {
+    clearTimeout(idleTimer);
     t.statusEl.style.display = 'none';
     t.answerEl.style.display = '';
     t.answerEl.className = 'answer note';
-    t.answerEl.textContent = 'Connection error: ' + err.message;
+    const aborted = err && (err.name === 'AbortError' || ctrl.signal.aborted);
+    t.answerEl.textContent = aborted
+      ? 'This took too long and was stopped. Please try again — if it keeps '
+        + 'happening, try a shorter or more specific question.'
+      : 'Connection error: ' + (err && err.message ? err.message : 'please try again.');
+  } finally {
+    clearTimeout(idleTimer);
   }
 
   messages.push({ role: 'assistant', content: clarified || answerRaw || '(cases shown)' });
@@ -522,8 +624,9 @@ function renderAccount() {
   if (!accountEl) return;
   if (me) {
     const initial = (me.name || me.email || '?').trim().charAt(0).toUpperCase();
-    const avatar = me.avatar_url
-      ? `<img class="acc-avatar" src="${escapeHtml(me.avatar_url)}" alt="" />`
+    const avatarSrc = safeUrl(me.avatar_url);
+    const avatar = avatarSrc
+      ? `<img class="acc-avatar" src="${escapeHtml(avatarSrc)}" alt="" referrerpolicy="no-referrer" />`
       : `<span class="acc-avatar acc-initial">${escapeHtml(initial)}</span>`;
     const planName = (me.plan || 'free');
     const usage = planInfo
@@ -556,8 +659,7 @@ function renderAccount() {
       </div>`;
     accountEl.querySelectorAll('.acc-signin').forEach((b) =>
       b.addEventListener('click', () => {
-        const next = encodeURIComponent(location.href);
-        location.href = `${API_BASE}/api/auth/${b.dataset.provider}/start?next=${next}`;
+        location.href = `${API_BASE}/api/auth/${b.dataset.provider}/start?next=${selfNext()}`;
       }));
   } else {
     accountEl.innerHTML = '';
@@ -580,8 +682,7 @@ function openLoginModal(pendingText) {
        </button>`).join('');
     body.querySelectorAll('.login-provider').forEach((b) =>
       b.addEventListener('click', () => {
-        const next = encodeURIComponent(location.href);
-        location.href = `${API_BASE}/api/auth/${b.dataset.provider}/start?next=${next}`;
+        location.href = `${API_BASE}/api/auth/${b.dataset.provider}/start?next=${selfNext()}`;
       }));
   } else {
     body.innerHTML = '<div class="login-hint">Sign-in is not available right now. Please try again later.</div>';
@@ -622,6 +723,11 @@ const PLAN_BLURB = {
   day_pass: { name: '3-Day Pass', price: '$2.98', pitch: 'Max-level research for 3 days — no subscription.' },
 };
 
+// A placeholder email we mint when a provider (e.g. X) doesn't release a real one.
+function isSyntheticEmail(e) {
+  return /@users\.juricodex\.online$/i.test(String(e || ''));
+}
+
 function openUpgradeModal(quota) {
   if (!upgradeModal) return;
   if (!billingCfg) {        // billing not configured — nothing to sell yet
@@ -629,6 +735,14 @@ function openUpgradeModal(quota) {
   }
   const sub = quota && quota.limit
     ? `<p class="up-quota">You've used all ${quota.limit} questions on the Free plan this month.</p>`
+    : '';
+  // X sign-ins may not release a real email, so we hold a placeholder address.
+  // Tell those users to keep the pre-filled email at checkout so the purchase
+  // links back to this account automatically.
+  const synthNote = (me && isSyntheticEmail(me.email))
+    ? `<p class="up-quota" style="color:var(--muted)">Tip: at checkout, keep the
+       pre-filled email so your purchase links to this account automatically. If
+       you change it, sign in again afterward with that email to apply it.</p>`
     : '';
   const cards = Object.entries(billingCfg.plans || {}).map(([ourPlan, planId]) => {
     const b = PLAN_BLURB[ourPlan] || { name: ourPlan, price: '', pitch: '' };
@@ -638,7 +752,7 @@ function openUpgradeModal(quota) {
         <span class="up-plan-pitch">${b.pitch}</span>
       </button>`;
   }).join('');
-  upgradeModal.querySelector('.up-body').innerHTML = sub + cards;
+  upgradeModal.querySelector('.up-body').innerHTML = sub + synthNote + cards;
   upgradeModal.querySelectorAll('.up-plan').forEach((b) =>
     b.addEventListener('click', () => startCheckout(b.dataset.planId)));
   upgradeModal.classList.add('open');
@@ -796,6 +910,37 @@ async function openSession(sessionId) {
 }
 
 authPromise = loadAuth();
+
+// ── Cookie consent banner ──────────────────────────────────────────────
+// We only set one essential auth cookie, but show a clear notice (and record
+// the choice) so EU/CA visitors get an explicit, dismissible disclosure.
+(function cookieConsent() {
+  const KEY = 'leagle-cookie-consent';
+  const banner = document.getElementById('cookieBanner');
+  if (!banner) return;
+  let decided = '';
+  try { decided = localStorage.getItem(KEY) || ''; } catch { /* ignore */ }
+  if (decided) return;
+  banner.classList.add('open');
+  const close = (choice) => {
+    try { localStorage.setItem(KEY, choice); } catch { /* ignore */ }
+    banner.classList.remove('open');
+  };
+  document.getElementById('cookieAccept')?.addEventListener('click', () => close('accepted'));
+  document.getElementById('cookieDecline')?.addEventListener('click', () => close('essential'));
+})();
+
+// If we just came back from a failed/cancelled OAuth round-trip the backend
+// redirects to /?auth_error=1 — surface a friendly message and clean the URL.
+try {
+  const params = new URLSearchParams(location.search);
+  if (params.get('auth_error')) {
+    params.delete('auth_error');
+    const qs = params.toString();
+    history.replaceState(null, '', location.pathname + (qs ? '?' + qs : '') + location.hash);
+    showToast('Sign-in didn\'t complete. Please try again.');
+  }
+} catch { /* ignore */ }
 
 // After an OAuth round-trip the user lands back here signed in; drop the
 // question they were about to ask back into the composer so it's one tap to send.

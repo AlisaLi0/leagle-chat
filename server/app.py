@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 import time
 from collections import deque
 from collections.abc import AsyncIterator
@@ -145,8 +146,16 @@ _ROUTE_SYSTEM = (
     "question is plausibly governed by a FEDERAL rule — e.g. overtime/wage, workplace "
     "safety, environmental, benefits, food/drug, immigration procedure; else empty>\", "
     "\"clarify\": \"<one short question, only if action=clarify>\"}.\n"
-    "Use statute_query ONLY for areas actually regulated federally. Leave it empty for "
-    "purely state-law topics (landlord-tenant, most contracts, family, small claims).\n"
+    "Use statute_query ONLY for areas actually regulated federally. Leave it EMPTY for "
+    "purely state-law topics. Examples where statute_query MUST be empty: a residential "
+    "landlord withholding a security deposit (state landlord-tenant); a breach of a "
+    "private services contract (state contract law); child custody or divorce (state "
+    "family law); a slip-and-fall or car-accident negligence claim (state tort law); a "
+    "neighbor boundary/property dispute (state property law); a small-claims debt; a "
+    "state speeding ticket. Examples where statute_query IS appropriate: unpaid "
+    "overtime (FLSA, 29 CFR), an OSHA workplace-safety citation, an EPA emissions "
+    "permit, a denied Social Security/SSDI claim, an FDA labeling rule, removal/asylum "
+    "procedure. When in doubt for an everyday state-court matter, leave it empty.\n"
     "Clarify before answering when the jurisdiction, the procedural posture, a key "
     "fact, or which competing theory the user means is genuinely missing and would "
     "change which authorities matter. Otherwise prefer action=search. Keep queries "
@@ -277,10 +286,22 @@ async def chat(request: Request):
     user = _current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"error": "not_authenticated"})
-    # Monthly question quota per plan. Count the ask up-front (atomic); refund it
-    # if the request fails before producing anything. Over the limit -> 402 so
-    # the frontend can show the upgrade prompt. An active one-off day pass raises
-    # the effective plan to Max-level for its duration.
+    try:
+        body = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse(status_code=400, content={"error": "invalid_json"})
+    messages = body.get("messages") or []
+    messages = [
+        {"role": m.get("role", "user"), "content": str(m.get("content", ""))}
+        for m in messages
+        if m.get("content")
+    ]
+    if not messages:
+        return JSONResponse(status_code=400, content={"error": "no messages"})
+    # Monthly question quota per plan. Counted atomically only AFTER the request
+    # is known-valid; refunded inside gen() on any path that delivers no value
+    # (search outage / nothing found) so a failed request never burns a question.
+    # An active one-off day pass raises the effective plan to Max-level.
     eff = db.effective_plan(user)
     plan = db.PLANS.get(eff, db.PLANS[db.DEFAULT_PLAN])
     limit = int(plan["monthly_questions"])
@@ -292,16 +313,6 @@ async def chat(request: Request):
             "message": f"You've used all {limit} research questions on the "
                        f"{plan['label']} plan this month. Upgrade for more.",
         })
-    body = await request.json()
-    messages = body.get("messages") or []
-    messages = [
-        {"role": m.get("role", "user"), "content": str(m.get("content", ""))}
-        for m in messages
-        if m.get("content")
-    ]
-    if not messages:
-        db.refund_question(user.id)
-        return JSONResponse(status_code=400, content={"error": "no messages"})
     question = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     # Toolkit mode: one of concept|keyword|case|citation runs a direct, precise
     # search (no conversational routing/answer). Default "chat" is the full
@@ -309,6 +320,18 @@ async def chat(request: Request):
     mode = str(body.get("mode") or "chat").strip().lower()
 
     async def gen() -> AsyncIterator[str]:
+        # Refund the consumed question on any path that delivers no value (search
+        # outage or nothing found). Idempotent so we never double-credit.
+        refunded = {"v": False}
+
+        def refund() -> None:
+            if not refunded["v"]:
+                refunded["v"] = True
+                try:
+                    db.refund_question(user.id)
+                except Exception:
+                    pass
+
         # ── Toolkit: direct precise search, no LLM routing or answer ──────────
         if mode in ("concept", "keyword", "case", "citation"):
             label = {"concept": "by concept", "keyword": "by keyword",
@@ -317,6 +340,7 @@ async def chat(request: Request):
             try:
                 cases = await cl.search(question, mode=mode, max_results=10)
             except httpx.HTTPError as exc:
+                refund()
                 yield _sse("error", {"message": f"search failed: {exc}"})
                 yield _sse("done", {})
                 return
@@ -330,6 +354,7 @@ async def chat(request: Request):
                                  "count": len(cases),
                                  "cases": [c.to_dict() for c in cases]})
             if not cases:
+                refund()
                 yield _sse("token", {"text": "No matching case law was found. Try a "
                                      "different spelling, a fuller case name, or a "
                                      "precise reporter citation (e.g. 384 U.S. 436)."})
@@ -358,6 +383,7 @@ async def chat(request: Request):
             try:
                 cases = await cl.search(query, court=court, max_results=8)
             except httpx.HTTPError as exc:
+                refund()
                 yield _sse("error", {"message": f"search failed: {exc}"})
                 yield _sse("done", {})
                 return
@@ -416,6 +442,7 @@ async def chat(request: Request):
                                         "statutes": [s.to_dict() for s in statutes]})
 
         if not cases and not statutes:
+            refund()
             yield _sse("token", {"text": "No matching case law or federal regulation "
                                  "was found for this query. Try rephrasing with the "
                                  "parties, the legal issue, or a jurisdiction."})
@@ -425,12 +452,25 @@ async def chat(request: Request):
         # Organize the retrieved cases (LLM). Degrade gracefully if it is down.
         try:
             got_any = False
+            answer = ""
             async for delta in _organize(question, cases, statutes):
                 got_any = True
+                answer += delta
                 yield _sse("token", {"text": delta})
             if not got_any:
                 yield _sse("token", {"text": "(Showing retrieved cases above; the "
                                      "summarizer returned nothing.)"})
+            else:
+                # Anti-hallucination guard: every [n] marker must point at a real
+                # retrieved case. If the model invented an out-of-range index,
+                # warn the reader rather than letting it pass silently.
+                bad = _out_of_range_citations(answer, len(cases))
+                if bad:
+                    refs = ", ".join(f"[{i}]" for i in bad)
+                    yield _sse("warning", {"message":
+                        f"Citation check: marker(s) {refs} don't correspond to any "
+                        f"retrieved case above and may be inaccurate — rely only on "
+                        f"the {len(cases)} sources listed."})
         except httpx.HTTPError:
             yield _sse("token", {"text": "The summarizer is unavailable right now, "
                                  "but the real cases retrieved for your query are "
@@ -445,14 +485,44 @@ def health() -> dict:
     return {"status": "ok", "llm": llm.LLM_BASE_URL, "model": llm.LLM_MODEL}
 
 
+# Per-account sliding-minute rate limit for /api/verify-quote (cheap single
+# fetch, but unauthenticated-cheap is still a scraping lever — cap it).
+VERIFY_MAX_PER_MIN = int(os.getenv("LEAGLE_VERIFY_MAX_PER_MIN", "20"))
+_verify_hits: dict[int, deque] = {}
+
+
+def _verify_over_limit(user_id: int) -> bool:
+    if VERIFY_MAX_PER_MIN <= 0:
+        return False
+    now = time.time()
+    bucket = _verify_hits.setdefault(user_id, deque())
+    while bucket and now - bucket[0] > 60:
+        bucket.popleft()
+    if len(bucket) >= VERIFY_MAX_PER_MIN:
+        return True
+    bucket.append(now)
+    return False
+
+
 @app.post("/api/verify-quote")
 async def verify_quote(request: Request):
     """Anti-hallucination check: confirm a quote really appears in a case's
     opinion text. Signed-in only; does not count against the chat quota (it is
-    a cheap single fetch, and we want users to verify freely)."""
-    if not _current_user(request):
+    a cheap single fetch, and we want users to verify freely). Lightly rate
+    limited per account so it can't be turned into a scraping/DoS lever."""
+    user = _current_user(request)
+    if not user:
         return JSONResponse(status_code=401, content={"error": "not_authenticated"})
-    body = await request.json()
+    if _verify_over_limit(user.id):
+        return JSONResponse(status_code=429, content={
+            "error": "rate_limited",
+            "message": "Too many verification requests. Please slow down and try "
+                       "again in a moment.",
+        }, headers={"retry-after": "60"})
+    try:
+        body = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse(status_code=400, content={"error": "invalid_json"})
     cluster_id = str(body.get("cluster_id") or "").strip()
     quote = str(body.get("quote") or "").strip()
     if not cluster_id or not quote:
@@ -524,6 +594,43 @@ def _current_user(request: Request) -> db.User | None:
     return db.get_user(uid) if uid else None
 
 
+def _safe_redirect(next_url: str | None) -> str:
+    """Only allow post-login redirects to our own site — never an external URL
+    (prevents the OAuth flow being abused for phishing/open-redirect)."""
+    from urllib.parse import urlparse
+    base = auth.PUBLIC_BASE or ""
+    home = (base + "/") if base else "/"
+    if not next_url:
+        return home
+    try:
+        p = urlparse(next_url)
+    except ValueError:
+        return home
+    # Relative path (no scheme/host) is fine.
+    if not p.scheme and not p.netloc:
+        return next_url if next_url.startswith("/") else home
+    # Absolute URL: must match our public host.
+    if base:
+        bp = urlparse(base)
+        if p.scheme in ("http", "https") and p.netloc == bp.netloc:
+            return next_url
+    return home
+
+
+_CITE_RE = re.compile(r"\[(\d{1,3})\]")
+
+
+def _out_of_range_citations(text: str, n_cases: int) -> list[int]:
+    """Return the sorted set of [n] citation markers in *text* that point past
+    the list of retrieved cases (n < 1 or n > n_cases) — i.e. invented refs."""
+    bad: set[int] = set()
+    for m in _CITE_RE.finditer(text or ""):
+        n = int(m.group(1))
+        if n < 1 or n > n_cases:
+            bad.add(n)
+    return sorted(bad)
+
+
 @app.get("/api/auth/providers")
 def auth_providers() -> dict:
     """Which OAuth providers are configured (so the UI shows only those)."""
@@ -560,6 +667,10 @@ def auth_start(provider: str, request: Request):
 async def auth_callback(provider: str, request: Request):
     if provider not in auth.configured_providers():
         return JSONResponse(status_code=404, content={"error": "provider_not_configured"})
+    base = auth.PUBLIC_BASE or ""
+    failed_dest = (base or "") + "/?auth_error=1"
+    if request.query_params.get("error"):
+        return RedirectResponse(failed_dest, status_code=302)
     code = request.query_params.get("code", "")
     state = request.query_params.get("state", "")
     cookie_state = request.cookies.get("leagle_oauth_state", "")
@@ -572,8 +683,15 @@ async def auth_callback(provider: str, request: Request):
     except httpx.HTTPError:
         user = None
     if not user:
-        return JSONResponse(status_code=400, content={"error": "oauth_exchange_failed"})
-    dest = state_data.get("n") or (auth.PUBLIC_BASE + "/" if auth.PUBLIC_BASE else "/")
+        # Bounce back to the home page with an error flag the frontend can show.
+        return RedirectResponse(failed_dest, status_code=302)
+    # Apply any purchase that was parked before this account was matchable
+    # (e.g. paid with a real email after signing in via X under a synthetic one).
+    try:
+        billing.reconcile_pending(user)
+    except Exception:
+        pass
+    dest = _safe_redirect(state_data.get("n"))
     resp = RedirectResponse(dest, status_code=302)
     resp.set_cookie(auth.COOKIE_NAME, auth.make_session_cookie(user.id),
                     max_age=auth.COOKIE_MAX_AGE, httponly=True, secure=True,

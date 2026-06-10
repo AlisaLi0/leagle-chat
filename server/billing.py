@@ -123,15 +123,29 @@ def handle_event(evt: dict) -> dict:
     user_obj = objects.get("user") or {}
     email = (user_obj.get("email") or evt.get("user_email") or "").strip().lower()
 
-    user = db.get_user_by_email(email) if email else None
-    if not user:
-        return {"ok": True, "note": "user not found", "type": etype}
+    # Housekeeping: lapse any day passes that have run out (cheap, best-effort).
+    try:
+        db.expire_day_passes()
+    except Exception:
+        pass
 
     sub_obj = objects.get("subscription") or objects.get("license") or {}
     plan = _plan_from_obj(sub_obj) or _plan_from_obj(objects.get("plan") or {})
     ref = str(sub_obj.get("id") or (objects.get("license") or {}).get("id")
               or evt.get("id") or etype)
     period_end = _parse_period_end(sub_obj)
+
+    user = db.get_user_by_email(email) if email else None
+    if not user:
+        # No account with this payer email yet. Don't drop a paid upgrade on the
+        # floor (e.g. an X user who signed in under a synthetic email then paid
+        # with their real one): park it so it's applied the moment an account
+        # with this email signs in. Revocations for unknown users are no-ops.
+        if etype in ACTIVATE and plan and email:
+            db.add_pending_billing(email, plan, "freemius", ref, period_end, etype)
+            return {"ok": True, "note": "parked pending account", "plan": plan,
+                    "email": email, "type": etype}
+        return {"ok": True, "note": "user not found", "type": etype}
 
     if etype in DEACTIVATE:
         db.set_plan(user.id, "free")
@@ -153,3 +167,32 @@ def handle_event(evt: dict) -> dict:
         return {"ok": True, "action": "activate", "plan": plan, "type": etype, "user": user.id}
 
     return {"ok": True, "action": "ignored", "type": etype, "plan": plan}
+
+
+def reconcile_pending(user: "db.User") -> int:
+    """Apply any purchases that were parked before this account existed/was
+    matchable, now that the user has signed in with a matching email. Called on
+    login. Returns the number of purchases applied."""
+    if not user or not user.email:
+        return 0
+    try:
+        pending = db.take_pending_billing(user.email)
+    except Exception:
+        return 0
+    applied = 0
+    now = int(time.time())
+    for p in pending:
+        plan = p.get("plan")
+        if plan not in db.PLANS:
+            continue
+        ref = str(p.get("provider_ref") or "")
+        period_end = p.get("period_end")
+        if plan == "day_pass":
+            pass_end = period_end if (period_end and period_end > now) \
+                else now + db.PASS_DAYS * 86400
+            db.upsert_subscription(user.id, "day_pass", "freemius", ref, "active", pass_end)
+        else:
+            db.set_plan(user.id, plan)
+            db.upsert_subscription(user.id, plan, "freemius", ref, "active", period_end)
+        applied += 1
+    return applied

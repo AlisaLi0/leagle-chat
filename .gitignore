@@ -4,3 +4,8 @@ __pycache__/
 *.egg-info/
 .env
 .DS_Store
+
+# local sqlite artifact
+leagle.db
+leagle.db-wal
+leagle.db-shm

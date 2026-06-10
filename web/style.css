@@ -407,3 +407,55 @@ html, body {
     content: ""; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 20;
   }
 }
+
+/* Tablet / small-phone refinement: tighten the chat column so cards, the
+   composer and the legal pages don't crowd the edges or overflow. */
+@media (max-width: 600px) {
+  .chat, .composer-wrap, .intro { padding-left: 12px; padding-right: 12px; }
+  .case, .statute { padding: 11px 12px; }
+  .toast { max-width: calc(100vw - 24px); }
+  .cookie-banner { left: 10px; right: 10px; bottom: 10px; flex-direction: column; align-items: stretch; }
+  .cookie-banner .cookie-actions { justify-content: stretch; }
+  .cookie-banner .cookie-actions button { flex: 1; }
+}
+
+/* ── Transient toast ──────────────────────────────────────────── */
+.toast-host {
+  position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+  z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: center;
+  pointer-events: none;
+}
+.toast {
+  max-width: 360px; background: var(--ink); color: #fff;
+  padding: 10px 15px; border-radius: 10px; font-size: 13px; line-height: 1.4;
+  box-shadow: 0 10px 30px rgba(20,22,34,.28);
+  opacity: 0; transform: translateY(-6px); transition: opacity .25s ease, transform .25s ease;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+
+/* ── Non-fatal answer warning (e.g. citation-integrity check) ──── */
+.answer-warn {
+  margin: 4px 0 8px; padding: 8px 11px;
+  background: var(--warn-soft, #fff6e6); border: 1px solid var(--warn, #b9770e);
+  border-radius: 9px; color: var(--warn, #8a5a06); font-size: 12.5px; line-height: 1.45;
+}
+
+/* ── Cookie consent banner ────────────────────────────────────── */
+.cookie-banner {
+  position: fixed; left: 16px; right: 16px; bottom: 16px; z-index: 55;
+  display: none; align-items: center; gap: 14px; flex-wrap: wrap;
+  max-width: 720px; margin: 0 auto;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 13px;
+  padding: 13px 16px; box-shadow: 0 14px 40px rgba(20,22,34,.22);
+}
+.cookie-banner.open { display: flex; }
+.cookie-text { flex: 1; min-width: 220px; font-size: 12.5px; line-height: 1.5; color: var(--muted); }
+.cookie-text a { color: var(--accent-2); }
+.cookie-actions { display: flex; gap: 8px; }
+.cookie-actions button {
+  border-radius: 9px; padding: 8px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel-2); color: var(--ink);
+}
+.cookie-actions .cookie-accept { background: var(--accent); border-color: var(--accent); color: #fff; }
+.cookie-actions .cookie-accept:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.cookie-actions .cookie-decline:hover { border-color: var(--muted); }

@@ -81,6 +81,18 @@ CREATE TABLE IF NOT EXISTS subscriptions (
 );
 CREATE INDEX IF NOT EXISTS idx_sub_user ON subscriptions(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sub_ref ON subscriptions(provider, provider_ref);
+CREATE TABLE IF NOT EXISTS pending_billing (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    email         TEXT NOT NULL,          -- the payer email Freemius reported
+    plan          TEXT NOT NULL,
+    provider      TEXT,                   -- 'freemius'
+    provider_ref  TEXT,
+    period_end    INTEGER,
+    event_type    TEXT,
+    created_at    TEXT NOT NULL,
+    resolved_at   TEXT                    -- set when matched to an account
+);
+CREATE INDEX IF NOT EXISTS idx_pending_email ON pending_billing(email) WHERE resolved_at IS NULL;
 """
 
 
@@ -115,12 +127,22 @@ def _connect() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys=ON")
+    # Wait (instead of erroring) when another writer holds the lock — required
+    # for the BEGIN IMMEDIATE used by the atomic quota counter under concurrency.
+    conn.execute("PRAGMA busy_timeout=5000")
     return conn
 
 
 def init_db() -> None:
     conn = _connect()
     try:
+        # WAL lets readers and the single writer proceed concurrently and avoids
+        # the reader/writer stalls of the default rollback journal. Persisted on
+        # the db file, so setting it once here is enough.
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")
+        except sqlite3.DatabaseError:
+            pass
         conn.executescript(_SCHEMA)
         conn.commit()
     finally:
@@ -298,6 +320,34 @@ def active_day_pass_end(user_id: int) -> int | None:
         conn.close()
 
 
+def expire_day_passes(user_id: int | None = None) -> int:
+    """Mark lapsed one-off day passes as 'expired' so the subscriptions table
+    reflects reality (the quota path already ignores them via period_end, but
+    leaving them 'active' is misleading). Returns the number updated. Called
+    opportunistically from the billing webhook; safe to run anytime."""
+    conn = _connect()
+    try:
+        now = int(time.time())
+        if user_id is None:
+            cur = conn.execute(
+                "UPDATE subscriptions SET status='expired' "
+                "WHERE plan='day_pass' AND status='active' "
+                "AND period_end IS NOT NULL AND period_end <= ?",
+                (now,),
+            )
+        else:
+            cur = conn.execute(
+                "UPDATE subscriptions SET status='expired' "
+                "WHERE user_id=? AND plan='day_pass' AND status='active' "
+                "AND period_end IS NOT NULL AND period_end <= ?",
+                (user_id, now),
+            )
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def effective_plan(user: "User") -> str:
     """The plan whose quota applies right now: an active day pass beats the
     stored subscription plan; otherwise the user's own plan."""
@@ -326,24 +376,37 @@ def try_consume_question(user_id: int, limit: int) -> bool:
     """Atomically count one research question if under the monthly limit.
 
     Returns False (and counts nothing) when the user is already at their limit.
+    Uses BEGIN IMMEDIATE so the read-check-write is a single serialized write
+    transaction — two concurrent requests can't both slip past the limit (no
+    TOCTOU race).
     """
     month = _month()
     conn = _connect()
     try:
-        r = conn.execute(
-            "SELECT questions FROM usage_monthly WHERE user_id=? AND month=?",
-            (user_id, month),
-        ).fetchone()
-        used = r["questions"] if r else 0
-        if used >= limit:
-            return False
-        conn.execute(
-            "INSERT INTO usage_monthly (user_id, month, questions) VALUES (?, ?, 1) "
-            "ON CONFLICT(user_id, month) DO UPDATE SET questions = questions + 1",
-            (user_id, month),
-        )
-        conn.commit()
-        return True
+        conn.isolation_level = None  # take explicit control of the transaction
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            r = conn.execute(
+                "SELECT questions FROM usage_monthly WHERE user_id=? AND month=?",
+                (user_id, month),
+            ).fetchone()
+            used = r["questions"] if r else 0
+            if used >= limit:
+                conn.execute("ROLLBACK")
+                return False
+            conn.execute(
+                "INSERT INTO usage_monthly (user_id, month, questions) VALUES (?, ?, 1) "
+                "ON CONFLICT(user_id, month) DO UPDATE SET questions = questions + 1",
+                (user_id, month),
+            )
+            conn.execute("COMMIT")
+            return True
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
     finally:
         conn.close()
 
@@ -386,6 +449,58 @@ def upsert_subscription(user_id: int, plan: str, provider: str,
                 (user_id, plan, provider, provider_ref, status, period_end, now, now),
             )
         conn.commit()
+    finally:
+        conn.close()
+
+
+def add_pending_billing(email: str, plan: str, provider: str, provider_ref: str,
+                        period_end: int | None, event_type: str) -> None:
+    """Park a paid event whose payer email matches no account yet, so the
+    purchase is never silently lost (e.g. a user who signed in with X under a
+    synthetic email then paid with their real email). Reconciled on next login
+    with a matching email. Deduped on (provider, provider_ref)."""
+    if not email:
+        return
+    conn = _connect()
+    try:
+        dup = conn.execute(
+            "SELECT 1 FROM pending_billing WHERE provider=? AND provider_ref=? "
+            "AND resolved_at IS NULL",
+            (provider, provider_ref),
+        ).fetchone()
+        if dup:
+            return
+        conn.execute(
+            "INSERT INTO pending_billing (email, plan, provider, provider_ref, "
+            "period_end, event_type, created_at) VALUES (?,?,?,?,?,?,?)",
+            (email.strip().lower(), plan, provider, provider_ref, period_end,
+             event_type, _now()),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def take_pending_billing(email: str) -> list[dict]:
+    """Return and mark-resolved all unresolved pending purchases for an email
+    (called when a user with that email signs in)."""
+    if not email:
+        return []
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM pending_billing WHERE lower(email)=lower(?) "
+            "AND resolved_at IS NULL ORDER BY id",
+            (email.strip(),),
+        ).fetchall()
+        if rows:
+            conn.execute(
+                "UPDATE pending_billing SET resolved_at=? "
+                "WHERE lower(email)=lower(?) AND resolved_at IS NULL",
+                (_now(), email.strip()),
+            )
+            conn.commit()
+        return [dict(r) for r in rows]
     finally:
         conn.close()
 

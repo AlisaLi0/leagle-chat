@@ -351,35 +351,40 @@ class CourtListener:
             c.negative_count = count
             c.negative_examples = examples
 
-    async def opinion_text(self, cluster_id: str) -> str:
+    async def opinion_text(self, cluster_id: str) -> tuple[str, int, int]:
         """Fetch the full opinion text for a cluster.
 
         Resolves the cluster's sub-opinions and concatenates their plain text
-        (falling back to stripped HTML). Returns "" if unavailable. Detail
-        endpoints work anonymously for most opinions; a token raises limits.
+        (falling back to stripped HTML). Returns (text, fetched, total) where
+        `fetched` is how many sub-opinions were retrieved and `total` is how many
+        the cluster has — so callers can tell the user when a quote search wasn't
+        exhaustive. Returns ("", 0, 0) if unavailable. Detail endpoints work
+        anonymously for most opinions; a token raises limits.
         """
         cid = str(cluster_id or "").strip()
         if not cid.isdigit():
-            return ""
+            return "", 0, 0
         try:
             cluster = await self._get(f"/clusters/{cid}/", {})
         except httpx.HTTPError:
-            return ""
+            return "", 0, 0
         sub = cluster.get("sub_opinions") or []
         # sub_opinions are absolute API URLs; extract the trailing opinion id.
-        # Cap the number fetched: the lead opinion plus a few concurrences/
-        # dissents is enough to verify a quote, and it bounds load (each opinion
-        # can be hundreds of KB, and fetching all of a landmark's sub-opinions
-        # at once invites rate limiting).
-        op_ids: list[str] = []
+        # Cap how many we fetch: the lead opinion plus concurrences/dissents is
+        # enough to verify a quote, and it bounds load (each opinion can be
+        # hundreds of KB, and fetching all of a landmark's sub-opinions at once
+        # invites rate limiting). The cap is generous enough to cover the
+        # majority/concurrence/dissent split of even big landmark decisions.
+        MAX_OPINIONS = 12
+        all_ids: list[str] = []
         for u in sub:
             m = re.search(r"/opinions/(\d+)/", str(u))
             if m:
-                op_ids.append(m.group(1))
-            if len(op_ids) >= 4:
-                break
+                all_ids.append(m.group(1))
+        total = len(all_ids)
+        op_ids = all_ids[:MAX_OPINIONS]
         if not op_ids:
-            return ""
+            return "", 0, total
         texts = await asyncio.gather(
             *(self._get(f"/opinions/{oid}/", {}) for oid in op_ids),
             return_exceptions=True,
@@ -395,7 +400,7 @@ class CourtListener:
                 body = re.sub(r"\s+", " ", body).strip()
             if body:
                 parts.append(body)
-        return "\n\n".join(parts)
+        return "\n\n".join(parts), len(op_ids), total
 
     async def verify_quote(self, cluster_id: str, quote: str) -> dict:
         """Check whether `quote` actually appears in the opinion's real text.
@@ -408,15 +413,19 @@ class CourtListener:
         misses.
 
         Returns: {found: bool, match: "exact"|"normalized"|"not_found"|"no_text",
-                  context: str, quote: str, cluster_id: str, chars: int}.
+                  context: str, quote: str, cluster_id: str, chars: int,
+                  opinions_searched: int, opinions_total: int}.
         """
         q_raw = (quote or "").strip()
         out = {"found": False, "match": "not_found", "context": "",
-               "quote": q_raw, "cluster_id": str(cluster_id or ""), "chars": 0}
+               "quote": q_raw, "cluster_id": str(cluster_id or ""), "chars": 0,
+               "opinions_searched": 0, "opinions_total": 0}
         if len(q_raw) < 6:
             out["match"] = "too_short"
             return out
-        text = await self.opinion_text(cluster_id)
+        text, fetched, total = await self.opinion_text(cluster_id)
+        out["opinions_searched"] = fetched
+        out["opinions_total"] = total
         if not text:
             out["match"] = "no_text"
             return out
@@ -438,6 +447,10 @@ class CourtListener:
             ctx = self._context(text, max(approx, 0), len(q_raw)) if approx >= 0 else ""
             out.update(found=True, match="normalized", context=ctx)
             return out
+        # Not found. If we couldn't search every sub-opinion, say so — the quote
+        # may live in one we didn't fetch, so "not found" isn't conclusive.
+        if total > fetched:
+            out["partial"] = True
         return out
 
     @staticmethod
