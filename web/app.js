@@ -427,7 +427,8 @@ function api(path, opts = {}) {
   return fetch(API_BASE + path, { credentials: 'include', ...opts });
 }
 
-const PROVIDER_LABEL = { github: 'GitHub', google: 'Google' };
+const PROVIDER_LABEL = { github: 'GitHub', google: 'Google', x: 'X' };
+const PROVIDER_ICON = { github: '⌥', google: '◉', x: '𝕏' };
 
 function renderAccount() {
   if (!accountEl) return;
@@ -457,7 +458,7 @@ function renderAccount() {
   } else if (providers.length) {
     const btns = providers.map((p) =>
       `<button class="acc-signin" data-provider="${p}">
-         <span class="acc-ico">${p === 'github' ? '⌥' : '◉'}</span>
+         <span class="acc-ico">${PROVIDER_ICON[p] || '◉'}</span>
          Sign in with ${PROVIDER_LABEL[p] || p}
        </button>`).join('');
     accountEl.innerHTML = `
@@ -486,7 +487,7 @@ function openLoginModal(pendingText) {
   if (providers.length) {
     body.innerHTML = providers.map((p) =>
       `<button class="login-provider" data-provider="${p}">
-         <span class="acc-ico">${p === 'github' ? '⌥' : '◉'}</span>
+         <span class="acc-ico">${PROVIDER_ICON[p] || '◉'}</span>
          Continue with ${PROVIDER_LABEL[p] || p}
        </button>`).join('');
     body.querySelectorAll('.login-provider').forEach((b) =>

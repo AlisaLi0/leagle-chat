@@ -67,6 +67,19 @@ PROVIDERS = {
         "client_id": os.getenv("GOOGLE_CLIENT_ID", ""),
         "client_secret": os.getenv("GOOGLE_CLIENT_SECRET", ""),
     },
+    # X (Twitter) OAuth 2.0 Authorization Code + PKCE. Unlike github/google it
+    # requires a PKCE code_challenge/verifier and authenticates the token call
+    # with HTTP Basic (client_id:client_secret). users.email scope returns the
+    # address on /2/users/me.
+    "x": {
+        "authorize": "https://twitter.com/i/oauth2/authorize",
+        "token": "https://api.x.com/2/oauth2/token",
+        "userinfo": "https://api.x.com/2/users/me?user.fields=profile_image_url,name,username,confirmed_email",
+        "scope": "users.read tweet.read users.email",
+        "pkce": True,
+        "client_id": os.getenv("X_CLIENT_ID", ""),
+        "client_secret": os.getenv("X_CLIENT_SECRET", ""),
+    },
 }
 
 
@@ -114,10 +127,26 @@ def make_session_cookie(user_id: int) -> str:
     return _sign({"uid": int(user_id), "exp": int(time.time()) + COOKIE_MAX_AGE})
 
 
-def make_state(provider: str, next_url: str = "") -> str:
-    return _sign({"p": provider, "n": next_url[:300],
-                  "exp": int(time.time()) + _STATE_MAX_AGE,
-                  "nonce": secrets.token_urlsafe(8)})
+# ── PKCE (for providers that require it, e.g. X) ────────────────────────────
+
+def _b64url_nopad(raw: bytes) -> str:
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode()
+
+
+def make_pkce() -> tuple[str, str]:
+    """Return (code_verifier, code_challenge) for PKCE S256."""
+    verifier = _b64url_nopad(secrets.token_bytes(32))            # 43 chars, RFC-safe
+    challenge = _b64url_nopad(hashlib.sha256(verifier.encode()).digest())
+    return verifier, challenge
+
+
+def make_state(provider: str, next_url: str = "", verifier: str = "") -> str:
+    payload = {"p": provider, "n": next_url[:300],
+               "exp": int(time.time()) + _STATE_MAX_AGE,
+               "nonce": secrets.token_urlsafe(8)}
+    if verifier:
+        payload["v"] = verifier                                  # PKCE code_verifier
+    return _sign(payload)
 
 
 def read_state(token: str, provider: str) -> dict | None:
@@ -143,7 +172,7 @@ def user_id_from_cookie(token: str | None) -> int | None:
 
 # ── OAuth handshake ─────────────────────────────────────────────────────────
 
-def authorize_url(provider: str, state: str) -> str:
+def authorize_url(provider: str, state: str, challenge: str = "") -> str:
     cfg = PROVIDERS[provider]
     from urllib.parse import urlencode
     params = {
@@ -156,24 +185,30 @@ def authorize_url(provider: str, state: str) -> str:
     if provider == "google":
         params["access_type"] = "online"
         params["prompt"] = "select_account"
+    if cfg.get("pkce"):
+        params["code_challenge"] = challenge
+        params["code_challenge_method"] = "S256"
     return f"{cfg['authorize']}?{urlencode(params)}"
 
 
-async def exchange_code(provider: str, code: str) -> db.User | None:
+async def exchange_code(provider: str, code: str, verifier: str = "") -> db.User | None:
     """Exchange an OAuth code for the provider's profile and upsert the account."""
     cfg = PROVIDERS[provider]
+    data = {
+        "client_id": cfg["client_id"],
+        "code": code,
+        "redirect_uri": redirect_uri(provider),
+        "grant_type": "authorization_code",
+    }
+    post_kwargs: dict = {"headers": {"Accept": "application/json"}}
+    if cfg.get("pkce"):
+        # Confidential client: authenticate with HTTP Basic, send PKCE verifier.
+        data["code_verifier"] = verifier
+        post_kwargs["auth"] = (cfg["client_id"], cfg["client_secret"])
+    else:
+        data["client_secret"] = cfg["client_secret"]
     async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-        tok_resp = await client.post(
-            cfg["token"],
-            data={
-                "client_id": cfg["client_id"],
-                "client_secret": cfg["client_secret"],
-                "code": code,
-                "redirect_uri": redirect_uri(provider),
-                "grant_type": "authorization_code",
-            },
-            headers={"Accept": "application/json"},
-        )
+        tok_resp = await client.post(cfg["token"], data=data, **post_kwargs)
         tok_resp.raise_for_status()
         tok = tok_resp.json()
         access = tok.get("access_token")
@@ -196,6 +231,17 @@ async def exchange_code(provider: str, code: str) -> db.User | None:
                     email = (primary or (emails[0] if emails else {})).get("email", "")
                 except (httpx.HTTPError, ValueError, IndexError):
                     email = ""
+        elif provider == "x":
+            # /2/users/me wraps the profile in a "data" object.
+            d = info.get("data") or info
+            puid = str(d.get("id") or "")
+            name = d.get("name") or d.get("username") or ""
+            avatar = d.get("profile_image_url") or ""
+            email = d.get("confirmed_email") or d.get("email") or ""
+            if not email and puid:
+                # X may withhold email; synthesise a stable account id so the user
+                # can still sign in (billing match needs a real email at checkout).
+                email = f"x_{puid}@users.juricodex.online"
         else:  # google
             puid = str(info.get("sub") or "")
             name = info.get("name") or ""

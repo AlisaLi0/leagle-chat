@@ -524,8 +524,13 @@ def auth_start(provider: str, request: Request):
     if provider not in auth.configured_providers():
         return JSONResponse(status_code=404, content={"error": "provider_not_configured"})
     next_url = request.query_params.get("next", "")
-    state = auth.make_state(provider, next_url)
-    resp = RedirectResponse(auth.authorize_url(provider, state), status_code=302)
+    # Providers that require PKCE (X) get a verifier (stashed in the signed state)
+    # and a derived challenge on the authorize URL.
+    verifier = challenge = ""
+    if auth.PROVIDERS[provider].get("pkce"):
+        verifier, challenge = auth.make_pkce()
+    state = auth.make_state(provider, next_url, verifier)
+    resp = RedirectResponse(auth.authorize_url(provider, state, challenge), status_code=302)
     # Echo state in a short-lived cookie too, to defend against CSRF on callback.
     resp.set_cookie("leagle_oauth_state", state, max_age=600, httponly=True,
                     secure=True, samesite="lax", path=auth.COOKIE_PATH)
@@ -542,13 +547,13 @@ async def auth_callback(provider: str, request: Request):
     # CSRF: the state must verify AND match the one we set at /start.
     if not code or not state or state != cookie_state or not auth.read_state(state, provider):
         return JSONResponse(status_code=400, content={"error": "invalid_oauth_state"})
+    state_data = auth.read_state(state, provider) or {}
     try:
-        user = await auth.exchange_code(provider, code)
+        user = await auth.exchange_code(provider, code, state_data.get("v", ""))
     except httpx.HTTPError:
         user = None
     if not user:
         return JSONResponse(status_code=400, content={"error": "oauth_exchange_failed"})
-    state_data = auth.read_state(state, provider) or {}
     dest = state_data.get("n") or (auth.PUBLIC_BASE + "/" if auth.PUBLIC_BASE else "/")
     resp = RedirectResponse(dest, status_code=302)
     resp.set_cookie(auth.COOKIE_NAME, auth.make_session_cookie(user.id),
