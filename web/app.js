@@ -231,6 +231,12 @@ chat.addEventListener('click', (e) => {
 
 async function send(text) {
   if (busy || !text.trim()) return;
+  // Require sign-in before asking. The whole research flow (LLM + retrieval) is
+  // gated behind an account, so a signed-out visitor who tries to ask is shown
+  // the sign-in dialog instead. Wait for the initial auth check if it's still
+  // in flight so we don't prompt a user who actually has a valid session.
+  if (!authReady && authPromise) { try { await authPromise; } catch { /* ignore */ } }
+  if (!me) { openLoginModal(text); return; }
   busy = true; sendBtn.disabled = true;
   document.querySelector('.intro')?.remove();
 
@@ -392,6 +398,8 @@ const accountEl = document.getElementById('account');
 let me = null;                 // current signed-in user, or null
 let providers = [];            // configured OAuth providers, e.g. ['github']
 let currentSessionId = null;   // backend id of the active thread (when signed in)
+let authReady = false;         // true once /api/auth/me has resolved
+let authPromise = null;        // the in-flight initial auth load
 
 function api(path, opts = {}) {
   return fetch(API_BASE + path, { credentials: 'include', ...opts });
@@ -437,6 +445,42 @@ function renderAccount() {
   }
 }
 
+// ── Sign-in gate modal (shown when a signed-out visitor tries to ask) ──
+const loginModal = document.getElementById('loginModal');
+
+function openLoginModal(pendingText) {
+  if (!loginModal) return;
+  // Stash the question so it's waiting in the composer after the OAuth round-trip.
+  if (pendingText) { try { sessionStorage.setItem('leagle-pending-q', pendingText); } catch { /* ignore */ } }
+  const body = loginModal.querySelector('.login-body');
+  if (providers.length) {
+    body.innerHTML = providers.map((p) =>
+      `<button class="login-provider" data-provider="${p}">
+         <span class="acc-ico">${p === 'github' ? '⌥' : '◉'}</span>
+         Continue with ${PROVIDER_LABEL[p] || p}
+       </button>`).join('');
+    body.querySelectorAll('.login-provider').forEach((b) =>
+      b.addEventListener('click', () => {
+        const next = encodeURIComponent(location.href);
+        location.href = `${API_BASE}/api/auth/${b.dataset.provider}/start?next=${next}`;
+      }));
+  } else {
+    body.innerHTML = '<div class="login-hint">Sign-in is not available right now. Please try again later.</div>';
+  }
+  loginModal.classList.add('open');
+  loginModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeLoginModal() {
+  if (!loginModal) return;
+  loginModal.classList.remove('open');
+  loginModal.setAttribute('aria-hidden', 'true');
+}
+
+document.getElementById('loginClose')?.addEventListener('click', closeLoginModal);
+loginModal?.addEventListener('click', (e) => { if (e.target === loginModal) closeLoginModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLoginModal(); });
+
 async function loadAuth() {
   try {
     const [meResp, provResp] = await Promise.all([
@@ -448,6 +492,7 @@ async function loadAuth() {
   } catch {
     me = null; providers = [];
   }
+  authReady = true;
   renderAccount();
   refreshHistory();
 }
@@ -552,7 +597,19 @@ async function openSession(sessionId) {
   input.focus();
 }
 
-loadAuth();
+authPromise = loadAuth();
+
+// After an OAuth round-trip the user lands back here signed in; drop the
+// question they were about to ask back into the composer so it's one tap to send.
+try {
+  const pending = sessionStorage.getItem('leagle-pending-q');
+  if (pending) {
+    sessionStorage.removeItem('leagle-pending-q');
+    input.value = pending;
+    input.dispatchEvent(new Event('input'));
+    input.focus();
+  }
+} catch { /* ignore */ }
 
 // ── Sidebar: nav items + research toolkit ────────────────────────
 const TOOL_HINTS = {

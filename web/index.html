@@ -86,6 +86,18 @@
     </div>
   </div>
 
+  <!-- Sign-in gate: shown when a signed-out visitor tries to ask a question. -->
+  <div class="login-overlay" id="loginModal" aria-hidden="true">
+    <div class="login-card" role="dialog" aria-modal="true" aria-label="Sign in to ask">
+      <button class="login-close" id="loginClose" aria-label="Close">✕</button>
+      <div class="login-logo">⚖</div>
+      <h2 class="login-title">Sign in to ask</h2>
+      <p class="login-sub">JuriCodex grounds every answer in real court opinions. Sign in to research and keep your work across devices.</p>
+      <div class="login-body"><!-- provider buttons injected by app.js --></div>
+      <p class="login-fine">Free to use · We never post on your behalf.</p>
+    </div>
+  </div>
+
   <script src="app.js"></script>
 </body>
 </html>

@@ -284,6 +284,44 @@ html, body {
 }
 .acc-signin:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-2); }
 .acc-ico { font-size: 14px; }
+
+/* ── Sign-in gate modal ─────────────────────────────── */
+.login-overlay {
+  position: fixed; inset: 0; z-index: 50;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(20, 22, 34, 0.45); backdrop-filter: blur(3px);
+  padding: 20px;
+}
+.login-overlay.open { display: flex; }
+.login-card {
+  position: relative; width: 100%; max-width: 380px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 30px 26px 22px; text-align: center;
+  box-shadow: 0 18px 50px rgba(20, 22, 34, 0.25);
+}
+.login-close {
+  position: absolute; top: 12px; right: 12px;
+  width: 30px; height: 30px; border: none; border-radius: 8px;
+  background: transparent; color: var(--muted); font-size: 15px; cursor: pointer;
+}
+.login-close:hover { background: var(--panel-2); color: var(--ink); }
+.login-logo {
+  width: 46px; height: 46px; margin: 0 auto 12px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 24px; border-radius: 12px;
+  background: var(--accent-soft); color: var(--accent-2);
+}
+.login-title { margin: 0 0 6px; font-size: 19px; font-weight: 700; color: var(--ink); }
+.login-sub { margin: 0 0 18px; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.login-body { display: flex; flex-direction: column; gap: 9px; }
+.login-provider {
+  display: flex; align-items: center; justify-content: center; gap: 9px; width: 100%;
+  background: var(--accent); border: 1px solid var(--accent); color: #fff;
+  padding: 11px 14px; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.login-provider:hover { background: var(--accent-2); border-color: var(--accent-2); }
+.login-hint { font-size: 13px; color: var(--muted); padding: 8px 0; }
+.login-fine { margin: 16px 0 0; font-size: 11px; color: var(--muted); }
 .acc-user { display: flex; align-items: center; gap: 9px; }
 .acc-avatar {
   width: 30px; height: 30px; border-radius: 50%; flex: 0 0 auto;
