@@ -282,6 +282,109 @@ class CourtListener:
             c.last_cited = last
             c.treatment = _treatment_label(count)
 
+    async def resolve_reference(self, ref: str, *, kind: str = "") -> Case | None:
+        """Resolve a citation/case-name-ish reference to the best matching Case.
+
+        MVP strategy for Brief Review: use CourtListener's citation-lookup API
+        when we have a reporter citation, then fall back to the same search modes
+        exposed in the Toolkit. This stays deterministic and source-backed; ML
+        or LLM extraction can be layered later.
+        """
+        text = (ref or "").strip()
+        if not text:
+            return None
+        if kind == "citation":
+            hit = await self.lookup_citation(text)
+            if hit:
+                return hit
+            results = await self.search(text, mode="citation", max_results=1)
+            return results[0] if results else None
+        mode = "case" if kind == "case" else "keyword"
+        results = await self.search(text, mode=mode, max_results=1)
+        return results[0] if results else None
+
+    async def lookup_citation(self, citation: str) -> Case | None:
+        """Use CourtListener's citation lookup endpoint when available.
+
+        The endpoint returns cluster/search-like objects for exact citations.
+        If it is unavailable or the response shape changes, callers fall back to
+        `search(..., mode="citation")`.
+        """
+        cite = (citation or "").strip()
+        if not cite:
+            return None
+        try:
+            data = await self._post("/citation-lookup/", {"text": cite})
+        except Exception:
+            data = None
+        rows = data if isinstance(data, list) else (data.get("results") if isinstance(data, dict) else None)
+        if not rows:
+            return None
+        row = rows[0]
+        if not isinstance(row, dict):
+            return None
+        # citation-lookup may return a cluster-like object instead of search row.
+        if "cluster_id" not in row and row.get("id"):
+            row = {**row, "cluster_id": row.get("id")}
+        return self._parse(row)
+
+    async def case_details(self, cluster_id: str) -> dict:
+        """Return source-backed case metadata + opinion inventory/PDF links.
+
+        Best-effort and conservative: if a field or PDF link is absent, omit it
+        rather than inventing. The frontend uses this for the "Details / PDFs"
+        expander on authority cards and Brief Review rows.
+        """
+        cid = str(cluster_id or "").strip()
+        if not cid.isdigit():
+            return {"cluster_id": cid, "opinions": []}
+        cluster = await self._get(f"/clusters/{cid}/", {})
+        if not cluster:
+            return {"cluster_id": cid, "opinions": []}
+        abs_url = cluster.get("absolute_url") or ""
+        sub = cluster.get("sub_opinions") or []
+        op_ids: list[str] = []
+        for u in sub:
+            m = re.search(r"/opinions/(\d+)/", str(u))
+            if m:
+                op_ids.append(m.group(1))
+        op_ids = op_ids[:12]
+        details = await asyncio.gather(
+            *(self._get(f"/opinions/{oid}/", {}) for oid in op_ids),
+            return_exceptions=True,
+        ) if op_ids else []
+        opinions: list[dict] = []
+        for oid, op in zip(op_ids, details):
+            if isinstance(op, Exception) or not isinstance(op, dict):
+                continue
+            op_abs = op.get("absolute_url") or ""
+            pdf = op.get("download_url") or op.get("local_path") or ""
+            if pdf and pdf.startswith("/"):
+                pdf = f"{CL_WEB}{pdf}"
+            opinions.append({
+                "id": oid,
+                "type": op.get("type") or op.get("type_name") or "opinion",
+                "author": op.get("author_str") or op.get("author") or "",
+                "url": f"{CL_WEB}{op_abs}" if op_abs else "",
+                "pdf_url": pdf if isinstance(pdf, str) and pdf.startswith("http") else "",
+                "has_text": bool((op.get("plain_text") or op.get("html_with_citations") or op.get("html") or "").strip()),
+            })
+        citations = cluster.get("citations") or cluster.get("citation") or []
+        if citations and isinstance(citations[0] if isinstance(citations, list) else None, dict):
+            citations = [c.get("cite") or c.get("citation") or "" for c in citations]
+        return {
+            "cluster_id": cid,
+            "title": cluster.get("case_name") or cluster.get("caseName") or cluster.get("case_name_full") or "",
+            "court": cluster.get("court") or "",
+            "date": (cluster.get("date_filed") or cluster.get("dateFiled") or "")[:10],
+            "docket_number": cluster.get("docket_number") or cluster.get("docketNumber") or "",
+            "precedential_status": cluster.get("precedential_status") or "",
+            "citations": [c for c in citations if c] if isinstance(citations, list) else [],
+            "url": f"{CL_WEB}{abs_url}" if abs_url else "",
+            "opinions_total": len(op_ids),
+            "opinions": opinions,
+        }
+
     async def negative_treatment(self, cluster_id: str, case_name: str = "") -> tuple[int, list[dict]]:
         """Heuristic negative-treatment signal for a case.
 
@@ -507,6 +610,36 @@ class CourtListener:
                     return {}
                 if resp.status_code in (401, 403):
                     # Search is anonymous; detail endpoints need a token.
+                    return {}
+                if resp.status_code in _RETRY_STATUS:
+                    last_exc = httpx.HTTPStatusError(
+                        f"CourtListener {resp.status_code}",
+                        request=resp.request, response=resp)
+                    await asyncio.sleep(backoff)
+                    continue
+                resp.raise_for_status()
+                return resp.json()
+        if last_exc:
+            raise last_exc
+        return {}
+
+    async def _post(self, path: str, json_body: dict) -> dict | list:
+        url = f"{self._base_url}{path}"
+        last_exc: Exception | None = None
+        async with httpx.AsyncClient(
+            timeout=self._timeout, follow_redirects=True, headers=self._headers()
+        ) as client:
+            for attempt in range(self._max_retries):
+                backoff = min(3.0 * (attempt + 1), 12.0)
+                try:
+                    resp = await client.post(url, json=json_body)
+                except httpx.TransportError as exc:
+                    last_exc = exc
+                    await asyncio.sleep(backoff)
+                    continue
+                if resp.status_code == 404:
+                    return {}
+                if resp.status_code in (401, 403):
                     return {}
                 if resp.status_code in _RETRY_STATUS:
                     last_exc = httpx.HTTPStatusError(

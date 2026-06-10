@@ -314,9 +314,9 @@ async def chat(request: Request):
                        f"{plan['label']} plan this month. Upgrade for more.",
         })
     question = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
-    # Toolkit mode: one of concept|keyword|case|citation runs a direct, precise
-    # search (no conversational routing/answer). Default "chat" is the full
-    # leagleLM reasoning flow.
+    # Toolkit mode: concept|keyword|case|citation runs direct precise search;
+    # brief runs a source-backed citation/quote review over pasted legal text.
+    # Default "chat" is the full JuriCodex Legal Reasoning Engine flow.
     mode = str(body.get("mode") or "chat").strip().lower()
 
     async def gen() -> AsyncIterator[str]:
@@ -331,6 +331,53 @@ async def chat(request: Request):
                     db.refund_question(user.id)
                 except Exception:
                     pass
+
+        # ── Brief Review: extract citations/case refs, resolve, quote-check ──
+        if mode == "brief":
+            yield _sse("status", {"message": "Extracting citations and case references…"})
+            refs = _extract_legal_references(question)
+            if not refs:
+                refund()
+                yield _sse("brief_review", {"count": 0, "rows": []})
+                yield _sse("token", {"text": "No recognizable case citations or case names were found. Paste a brief, memo, or argument with reporter citations (for example, 384 U.S. 436) or full case names."})
+                yield _sse("done", {})
+                return
+            yield _sse("status", {"message": f"Resolving {len(refs)} reference(s) against primary-law sources…"})
+
+            async def resolve_one(ref: dict) -> dict:
+                row = {"ref": ref, "case": None, "quote_check": None, "status": "unresolved"}
+                try:
+                    case = await cl.resolve_reference(ref["text"], kind=ref["kind"])
+                except Exception:
+                    case = None
+                if not case:
+                    return row
+                try:
+                    await cl.attach_treatment([case], top=1)
+                except Exception:
+                    pass
+                row["case"] = case.to_dict()
+                row["status"] = "resolved"
+                if ref.get("quote"):
+                    try:
+                        row["quote_check"] = await cl.verify_quote(case.id, ref["quote"])
+                    except Exception:
+                        row["quote_check"] = {"found": False, "match": "error", "context": ""}
+                return row
+
+            rows = await asyncio.gather(*(resolve_one(r) for r in refs), return_exceptions=True)
+            clean_rows = [r for r in rows if isinstance(r, dict)]
+            yield _sse("brief_review", {"count": len(clean_rows), "rows": clean_rows})
+            resolved = sum(1 for r in clean_rows if r.get("case"))
+            checked = sum(1 for r in clean_rows if r.get("quote_check"))
+            found = sum(1 for r in clean_rows if (r.get("quote_check") or {}).get("found"))
+            yield _sse("token", {"text":
+                f"Brief Review checked {len(clean_rows)} extracted reference(s): "
+                f"{resolved} resolved to source-backed cases. "
+                + (f"{found}/{checked} nearby quote(s) were found in the matched opinions. " if checked else "")
+                + "Use the table above as a verification checklist, not legal advice."})
+            yield _sse("done", {})
+            return
 
         # ── Toolkit: direct precise search, no LLM routing or answer ──────────
         if mode in ("concept", "keyword", "case", "citation"):
@@ -534,6 +581,22 @@ async def verify_quote(request: Request):
     return result
 
 
+@app.get("/api/case-details/{cluster_id}")
+async def case_details(cluster_id: str, request: Request):
+    """Case metadata + opinion inventory/PDF links for a known cluster.
+
+    Signed-in only. Used by authority cards and Brief Review rows so users can
+    inspect source metadata without leaving the workspace.
+    """
+    if not _current_user(request):
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    try:
+        result = await cl.case_details(cluster_id)
+    except httpx.HTTPError as exc:
+        return JSONResponse(status_code=502, content={"error": f"details failed: {exc}"})
+    return result
+
+
 # Extension-less aliases for the legal pages (referenced by Google's OAuth
 # consent screen and Freemius checkout as /terms and /privacy).
 @app.get("/terms")
@@ -619,6 +682,24 @@ def _safe_redirect(next_url: str | None) -> str:
 
 _CITE_RE = re.compile(r"\[(\d{1,3})\]")
 
+# MVP citation/reference extraction for Brief Review. This is intentionally
+# deterministic regex + source lookup. ML/LLM extraction can be layered later,
+# but this already catches common reporter citations and full case names.
+_REPORTER_CITE_RE = re.compile(
+    r"\b\d{1,4}\s+(?:"
+    r"U\.S\.|S\.\s?Ct\.|L\.\s?Ed\.\s?2d|"
+    r"F\.\s?\d+d|F\.\s?Supp\.?\s?\d*d?|F\.\s?App'?x|"
+    r"Cal\.\s?\d+(?:th)?|N\.Y\.\s?\d+d|A\.\s?\d+d|"
+    r"S\.W\.\s?\d+d|N\.E\.\s?\d+d|N\.W\.\s?\d+d|P\.\s?\d+d"
+    r")\s+\d{1,5}\b",
+    re.I,
+)
+_CASE_NAME_RE = re.compile(
+    r"\b[A-Z][A-Za-z0-9&'’.,\- ]{2,80}\s+v\.\s+"
+    r"[A-Z][A-Za-z0-9&'’.,\- ]{2,80}\b"
+)
+_QUOTE_RE = re.compile(r"[\"“]([^\"”]{20,900})[\"”]")
+
 
 def _out_of_range_citations(text: str, n_cases: int) -> list[int]:
     """Return the sorted set of [n] citation markers in *text* that point past
@@ -629,6 +710,42 @@ def _out_of_range_citations(text: str, n_cases: int) -> list[int]:
         if n < 1 or n > n_cases:
             bad.add(n)
     return sorted(bad)
+
+
+def _nearest_quote(text: str, start: int, end: int) -> str:
+    best: tuple[int, str] | None = None
+    for q in _QUOTE_RE.finditer(text or ""):
+        dist = min(abs(q.end() - start), abs(q.start() - end))
+        if dist <= 700 and (best is None or dist < best[0]):
+            best = (dist, q.group(1).strip())
+    return best[1] if best else ""
+
+
+def _extract_legal_references(text: str, *, limit: int = 24) -> list[dict]:
+    refs: list[dict] = []
+    seen: set[str] = set()
+
+    def add(kind: str, value: str, start: int, end: int) -> None:
+        clean = re.sub(r"\s+", " ", value or "").strip(" ,.;")
+        key = f"{kind}:{clean.lower()}"
+        if not clean or key in seen or len(refs) >= limit:
+            return
+        seen.add(key)
+        refs.append({
+            "kind": kind,
+            "text": clean,
+            "quote": _nearest_quote(text, start, end),
+        })
+
+    for m in _REPORTER_CITE_RE.finditer(text or ""):
+        add("citation", m.group(0), m.start(), m.end())
+    for m in _CASE_NAME_RE.finditer(text or ""):
+        # Avoid treating long ordinary prose as a caption; require a compact-ish
+        # full case reference with the canonical "v." marker.
+        value = re.sub(r"\s+", " ", m.group(0))
+        if len(value) <= 140:
+            add("case", value, m.start(), m.end())
+    return refs
 
 
 @app.get("/api/auth/providers")

@@ -9,7 +9,7 @@
        serves this frontend and the /api/* routes from the same host, so all
        requests, cookies and the OAuth callback stay first-party. -->
   <meta name="leagle-api-base" content="" />
-  <link rel="stylesheet" href="style.css?v=20260611b" />
+  <link rel="stylesheet" href="style.css?v=20260611c" />
 </head>
 <body>
   <div class="app">
@@ -23,7 +23,7 @@
         <div class="nav-group">
           <div class="nav-group-title">Legal Reasoning Engine</div>
           <button class="nav-item active" data-action="new">
-            <span class="nav-ico">✦</span><span>JuriCodex</span><span class="beta-badge beta-mini">Beta</span>
+            <span class="nav-ico">✦</span><span>Research Engine</span><span class="beta-badge beta-mini">Beta</span>
           </button>
         </div>
 
@@ -33,6 +33,7 @@
           <button class="nav-item" data-tool="keyword"><span class="nav-ico">⌕</span><span>Search by Keyword</span></button>
           <button class="nav-item" data-tool="case"><span class="nav-ico">§</span><span>Search by Case Name</span></button>
           <button class="nav-item" data-tool="citation"><span class="nav-ico">❝</span><span>Search by Citation</span></button>
+          <button class="nav-item" data-tool="brief"><span class="nav-ico">▤</span><span>Brief Review</span><span class="beta-badge beta-mini">Beta</span></button>
         </div>
 
         <div class="nav-group history-group">
@@ -53,7 +54,7 @@
     <div class="main">
       <header class="topbar">
         <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
-        <div class="topbar-title">Legal Research</div>
+        <div class="topbar-title">JuriCodex Platform <span class="beta-badge">Beta</span></div>
         <div class="topbar-tag">Find the law · reason through it · verify every step</div>
       </header>
 
@@ -61,10 +62,26 @@
         <div class="intro">
           <h1>Find the law. Reason through it. Verify every step.</h1>
           <p>
-            Ask a legal question in plain English. JuriCodex works through it grounded in
-            real US court opinions — showing the authorities it relied on, the rule they
-            establish, and citations and links you can open and verify yourself.
+            JuriCodex Platform Beta is a legal research workspace with two ways in:
+            a Legal Reasoning Engine for working through questions, and a Legal Research
+            Toolkit for searching, checking, and verifying primary law directly.
           </p>
+          <div class="platform-split">
+            <div class="platform-card">
+              <div class="platform-kicker">Legal Reasoning Engine</div>
+              <h2>When the work goes beyond search.</h2>
+              <p>Ask a question in plain English. JuriCodex clarifies when facts matter,
+                searches real authorities, refines the query when needed, and shows what
+                the answer depends on.</p>
+            </div>
+            <div class="platform-card">
+              <div class="platform-kicker">Legal Research Toolkit</div>
+              <h2>Search it. Cite it. Verify it.</h2>
+              <p>Start from a concept, keyword, case name, citation, or pasted brief.
+                Find source-backed cases, statutes, regulations, quote checks, and
+                treatment-lite signals you can inspect.</p>
+            </div>
+          </div>
           <p class="disclaimer">
             JuriCodex reasons from <strong>real primary sources</strong> you can open and
             verify. It is a <strong>research tool</strong> — verify the authorities before
@@ -103,8 +120,8 @@
     <div class="login-card up-card" role="dialog" aria-modal="true" aria-label="Upgrade JuriCodex">
       <button class="login-close" id="upgradeClose" aria-label="Close">✕</button>
       <div class="login-logo">⚖</div>
-      <h2 class="login-title">Upgrade JuriCodex</h2>
-      <p class="login-sub">More research questions and the quote-verification tools, grounded in real law.</p>
+      <h2 class="login-title">Choose a Platform workspace plan</h2>
+      <p class="login-sub">Workspace plans for source-backed research, verification, history, and export.</p>
       <div class="up-body"><!-- plan cards injected by app.js --></div>
       <p class="login-fine">Secure checkout by Freemius · Cancel anytime.</p>
     </div>
@@ -123,6 +140,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260611d"></script>
+  <script src="app.js?v=20260611e"></script>
 </body>
 </html>

@@ -227,6 +227,7 @@ function renderCases(casesEl, turnId, cases) {
       ${cites ? `<div class="cites">${escapeHtml(cites)}</div>` : ''}
       ${c.snippet ? `<div class="snip">${escapeHtml(c.snippet.slice(0, 280))}…</div>` : ''}
       ${c.url ? `<a class="open" href="${escapeHtml(c.url)}" target="_blank" rel="noopener">Open full opinion ↗</a>` : ''}
+      ${c.id ? `<button type="button" class="details-toggle" data-cluster="${escapeHtml(String(c.id))}">Details / PDFs</button><div class="case-details" style="display:none"></div>` : ''}
       ${c.id ? `<div class="verify" data-cluster="${escapeHtml(String(c.id))}">
         <button type="button" class="verify-toggle">✓ Verify a quote</button>
         <div class="verify-box" style="display:none">
@@ -237,6 +238,62 @@ function renderCases(casesEl, turnId, cases) {
       </div>` : ''}`;
     casesEl.appendChild(card);
   });
+}
+
+function renderCaseDetailsBox(box, details) {
+  const citations = (details.citations || []).slice(0, 6).join(' · ');
+  const opinions = (details.opinions || []).map((op) => `
+    <li>
+      <span class="op-type">${escapeHtml(op.type || 'opinion')}</span>
+      ${op.author ? `<span class="op-author">${escapeHtml(op.author)}</span>` : ''}
+      ${op.has_text ? `<span class="op-text">text</span>` : ''}
+      ${op.url ? `<a href="${escapeHtml(op.url)}" target="_blank" rel="noopener">opinion</a>` : ''}
+      ${op.pdf_url ? `<a href="${escapeHtml(op.pdf_url)}" target="_blank" rel="noopener">PDF</a>` : ''}
+    </li>`).join('');
+  box.innerHTML = `
+    <div class="detail-grid">
+      ${details.date ? `<div><b>Date</b><span>${escapeHtml(details.date)}</span></div>` : ''}
+      ${details.court ? `<div><b>Court</b><span>${escapeHtml(details.court)}</span></div>` : ''}
+      ${details.docket_number ? `<div><b>Docket</b><span>${escapeHtml(details.docket_number)}</span></div>` : ''}
+      ${details.precedential_status ? `<div><b>Status</b><span>${escapeHtml(details.precedential_status)}</span></div>` : ''}
+    </div>
+    ${citations ? `<div class="detail-cites"><b>Citations</b> ${escapeHtml(citations)}</div>` : ''}
+    ${opinions ? `<div class="opinion-inventory"><b>Opinion inventory</b><ul>${opinions}</ul></div>` : '<div class="detail-empty">No opinion inventory was available.</div>'}`;
+}
+
+function renderBriefReview(turnEl, payload) {
+  let panel = turnEl.querySelector('.brief-review');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.className = 'brief-review';
+    turnEl.querySelector('.answer')?.insertAdjacentElement('beforebegin', panel);
+  }
+  const rows = payload.rows || [];
+  if (!rows.length) {
+    panel.innerHTML = '<div class="auth-head">Brief Review <span class="cnt">· 0 references</span></div><div class="answer note">No citations or case names were detected.</div>';
+    return;
+  }
+  const body = rows.map((r, i) => {
+    const c = r.case || {};
+    const qc = r.quote_check || null;
+    const quoteStatus = qc
+      ? (qc.found ? `Found (${escapeHtml(qc.match || 'match')})` : `Not found (${escapeHtml(qc.match || 'check')})`)
+      : (r.ref && r.ref.quote ? 'Quote not checked' : 'No nearby quote');
+    const statusClass = qc && qc.found ? 'br-ok' : (qc ? 'br-warn' : '');
+    return `<tr>
+      <td><span class="br-num">${i + 1}</span></td>
+      <td><div class="br-ref">${escapeHtml((r.ref || {}).text || '')}</div><div class="br-kind">${escapeHtml((r.ref || {}).kind || '')}</div></td>
+      <td>${c.title ? `<div class="br-case">${escapeHtml(c.title)}</div><div class="br-meta">${escapeHtml(c.court || '')}${c.date ? ' · ' + escapeHtml(c.date) : ''}</div>${(c.citations || []).length ? `<div class="br-cites">${escapeHtml((c.citations || []).slice(0, 2).join(' · '))}</div>` : ''}` : '<span class="br-miss">Unresolved</span>'}</td>
+      <td class="${statusClass}">${escapeHtml(quoteStatus)}${(r.ref || {}).quote ? `<div class="br-quote">“${escapeHtml((r.ref || {}).quote.slice(0, 180))}”</div>` : ''}</td>
+      <td>${c.id ? `<button type="button" class="details-toggle" data-cluster="${escapeHtml(String(c.id))}">Details / PDFs</button><div class="case-details" style="display:none"></div>` : ''}</td>
+    </tr>`;
+  }).join('');
+  panel.innerHTML = `
+    <div class="auth-head">Brief Review <span class="cnt">· ${rows.length} reference${rows.length === 1 ? '' : 's'}</span></div>
+    <div class="brief-table-wrap"><table class="brief-table">
+      <thead><tr><th></th><th>Extracted reference</th><th>Resolved authority</th><th>Quote check</th><th>Source</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table></div>`;
 }
 
 function renderStatutes(listEl, turnId, statutes) {
@@ -264,6 +321,33 @@ chat.addEventListener('click', (e) => {
     card.scrollIntoView({ behavior: 'smooth', block: 'center' });
     card.style.borderColor = 'var(--accent)';
     setTimeout(() => { card.style.borderColor = ''; }, 1200);
+  }
+});
+
+// Case metadata / opinion inventory / PDF links.
+chat.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.details-toggle');
+  if (!btn) return;
+  const box = btn.parentElement.querySelector('.case-details');
+  const clusterId = btn.dataset.cluster || '';
+  if (!box || !clusterId) return;
+  if (box.style.display !== 'none' && box.innerHTML) {
+    box.style.display = 'none';
+    return;
+  }
+  box.style.display = '';
+  box.className = 'case-details loading';
+  box.textContent = 'Loading case details…';
+  try {
+    const resp = await api('/api/case-details/' + encodeURIComponent(clusterId));
+    if (resp.status === 401) { me = null; renderAccount(); openLoginModal(); box.textContent = ''; return; }
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const details = await resp.json();
+    box.className = 'case-details';
+    renderCaseDetailsBox(box, details);
+  } catch {
+    box.className = 'case-details vr-warn';
+    box.textContent = 'Could not load details right now.';
   }
 });
 
@@ -498,6 +582,11 @@ async function send(text) {
             renderStatutes(t.statListEl, t.turnId, obj.statutes || []);
           }
           scrollDown();
+        } else if (ev === 'brief_review') {
+          setStep(t.el, 'authorities', 'done', true);
+          setStep(t.el, 'answer', 'active');
+          renderBriefReview(t.el, obj);
+          scrollDown();
         } else if (ev === 'token') {
           answerRaw += obj.text || '';
           setStep(t.el, 'answer', 'active', true);
@@ -726,9 +815,9 @@ function loadFreemius() {
 }
 
 const PLAN_BLURB = {
-  pro: { name: 'Pro', price: '$9.98/mo', pitch: '300 research questions a month + quote verification.' },
-  max: { name: 'Max', price: '$29.98/mo', pitch: 'Unlimited research for power users.' },
-  day_pass: { name: '3-Day Pass', price: '$2.98', pitch: 'Max-level research for 3 days — no subscription.' },
+  pro: { name: 'Pro', price: '$9.98/mo', pitch: 'Regular JuriCodex Platform workspace access: 300 source-backed research runs a month, verification, history, and export.' },
+  max: { name: 'Max', price: '$29.98/mo', pitch: 'High-volume Platform workspace access for heavier research, Brief Review, quote checks, export, and saved sessions.' },
+  day_pass: { name: '3-Day Pass', price: '$2.98', pitch: 'Try Max-level Platform access for 3 days without a subscription.' },
 };
 
 function hasBillingEmail() {
@@ -758,7 +847,8 @@ function openUpgradeModal(quota) {
         <span class="up-plan-pitch">${b.pitch}</span>
       </button>`;
   }).join('');
-  upgradeModal.querySelector('.up-body').innerHTML = sub + emailNote + cards;
+  const billingNote = `<div class="up-note"><strong>Monthly plans renew until canceled.</strong> Stop future renewals from billing management or by contacting support. Payments are processed securely by Freemius; JuriCodex never stores card details.</div>`;
+  upgradeModal.querySelector('.up-body').innerHTML = sub + emailNote + cards + billingNote;
   upgradeModal.querySelectorAll('.up-plan').forEach((b) =>
     b.addEventListener('click', () => startCheckout(b.dataset.planId, b.dataset.pricingId)));
   upgradeModal.classList.add('open');
@@ -984,6 +1074,7 @@ const TOOL_HINTS = {
   keyword: 'Enter keywords to search case law…',
   case: 'Enter a case name, e.g. Miranda v. Arizona',
   citation: 'Enter a citation, e.g. 384 U.S. 436',
+  brief: 'Paste a brief, memo, argument, or legal text to extract citations and verify quotes…',
 };
 document.querySelectorAll('.nav-item').forEach((b) => {
   b.addEventListener('click', () => {
