@@ -628,12 +628,17 @@ function renderAccount() {
     const avatar = avatarSrc
       ? `<img class="acc-avatar" src="${escapeHtml(avatarSrc)}" alt="" referrerpolicy="no-referrer" />`
       : `<span class="acc-avatar acc-initial">${escapeHtml(initial)}</span>`;
-    const planName = (me.plan || 'free');
+    const planName = (planInfo && planInfo.plan) || (me.plan || 'free');
     const usage = planInfo
       ? `${planInfo.used}/${planInfo.limit >= 100000 ? '∞' : planInfo.limit} this month`
       : `${escapeHtml(planName)} plan`;
     const upgrade = (billingCfg && planName === 'free')
       ? `<button class="acc-upgrade" id="upgradeBtn">Upgrade</button>` : '';
+    const manage = (billingCfg && planName !== 'free')
+      ? `<button class="acc-manage" id="manageBillingBtn">Manage billing</button>` : '';
+    const emailWarn = !hasBillingEmail()
+      ? `<div class="acc-email-warn">Add a verified email with your sign-in provider before subscribing.</div>`
+      : '';
     accountEl.innerHTML = `
       <div class="acc-user">
         ${avatar}
@@ -643,9 +648,12 @@ function renderAccount() {
         </div>
         <button class="acc-logout" id="logoutBtn" title="Sign out">⏋</button>
       </div>
-      ${upgrade}`;
+      ${emailWarn}
+      ${upgrade}
+      ${manage}`;
     document.getElementById('logoutBtn').addEventListener('click', logout);
     document.getElementById('upgradeBtn')?.addEventListener('click', () => openUpgradeModal());
+    document.getElementById('manageBillingBtn')?.addEventListener('click', openBillingPortal);
   } else if (providers.length) {
     const btns = providers.map((p) =>
       `<button class="acc-signin" data-provider="${p}">
@@ -783,6 +791,17 @@ async function startCheckout(planId) {
     },
     success: () => { closeUpgradeModal(); },
   });
+}
+
+function openBillingPortal() {
+  const url = billingCfg && safeUrl(billingCfg.portal_url);
+  if (url) {
+    window.open(url, '_blank', 'noopener');
+    return;
+  }
+  const email = (billingCfg && billingCfg.support_email) || 'support@juricodex.online';
+  showToast('Use your Freemius receipt email to manage billing, or contact support.');
+  location.href = `mailto:${email}?subject=${encodeURIComponent('Manage JuriCodex billing')}`;
 }
 
 document.getElementById('upgradeClose')?.addEventListener('click', closeUpgradeModal);

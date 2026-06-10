@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import time
 
@@ -25,6 +26,8 @@ from . import db
 PRODUCT_ID = os.getenv("FREEMIUS_PRODUCT_ID", "").strip()
 PUBLIC_KEY = os.getenv("FREEMIUS_PUBLIC_KEY", "").strip()
 SECRET_KEY = os.getenv("FREEMIUS_SECRET_KEY", "").strip()
+PORTAL_URL = os.getenv("FREEMIUS_PORTAL_URL", "").strip()
+SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL", "support@juricodex.online").strip()
 
 # our_plan -> Freemius plan_id (used to build a checkout link)
 PLAN_TO_FREEMIUS: dict[str, str] = {}
@@ -52,6 +55,8 @@ def public_config() -> dict | None:
         "product_id": PRODUCT_ID,
         "public_key": PUBLIC_KEY,
         "plans": PLAN_TO_FREEMIUS,
+        "portal_url": PORTAL_URL,
+        "support_email": SUPPORT_EMAIL,
     }
 
 
@@ -111,6 +116,14 @@ def _parse_period_end(obj: dict) -> int | None:
         return None
 
 
+def _event_id(evt: dict) -> str:
+    raw = evt.get("id") or evt.get("event_id") or evt.get("uuid")
+    if raw:
+        return str(raw)
+    body = json.dumps(evt or {}, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(body.encode()).hexdigest()
+
+
 def handle_event(evt: dict) -> dict:
     """Apply a (already signature-verified) Freemius event to our DB.
 
@@ -119,9 +132,13 @@ def handle_event(evt: dict) -> dict:
     or event types are acknowledged and ignored.
     """
     etype = (evt.get("type") or "").lower()
+    event_id = _event_id(evt)
     objects = evt.get("objects") or {}
     user_obj = objects.get("user") or {}
     email = (user_obj.get("email") or evt.get("user_email") or "").strip().lower()
+
+    if not db.add_billing_event("freemius", event_id, etype, email, evt):
+        return {"ok": True, "action": "duplicate", "type": etype, "event_id": event_id}
 
     # Housekeeping: lapse any day passes that have run out (cheap, best-effort).
     try:
@@ -138,20 +155,26 @@ def handle_event(evt: dict) -> dict:
     user = db.get_user_by_email(email) if email else None
     if not user:
         # No account with this payer email yet. Don't drop a paid upgrade on the
-        # floor (e.g. an X user who signed in under a synthetic email then paid
-        # with their real one): park it so it's applied the moment an account
-        # with this email signs in. Revocations for unknown users are no-ops.
+        # floor: park it so it's applied the moment an account with this email
+        # signs in. Revocations for unknown users are no-ops.
         if etype in ACTIVATE and plan and email:
             db.add_pending_billing(email, plan, "freemius", ref, period_end, etype)
+            db.finish_billing_event("freemius", event_id, user_id=None, plan=plan,
+                                    action="pending_account")
             return {"ok": True, "note": "parked pending account", "plan": plan,
-                    "email": email, "type": etype}
+                    "email": email, "type": etype, "event_id": event_id}
+        db.finish_billing_event("freemius", event_id, user_id=None, plan=plan,
+                                action="user_not_found")
         return {"ok": True, "note": "user not found", "type": etype}
 
     if etype in DEACTIVATE:
         db.set_plan(user.id, "free")
         if plan:
             db.upsert_subscription(user.id, plan, "freemius", ref, "cancelled", period_end)
-        return {"ok": True, "action": "downgrade", "type": etype, "user": user.id}
+        db.finish_billing_event("freemius", event_id, user_id=user.id, plan=plan,
+                                action="downgrade")
+        return {"ok": True, "action": "downgrade", "type": etype, "user": user.id,
+                "event_id": event_id}
 
     if etype in ACTIVATE and plan:
         if plan == "day_pass":
@@ -160,12 +183,19 @@ def handle_event(evt: dict) -> dict:
             # subscription's period_end passes — see db.effective_plan).
             pass_end = int(time.time()) + db.PASS_DAYS * 86400
             db.upsert_subscription(user.id, "day_pass", "freemius", ref, "active", pass_end)
+            db.finish_billing_event("freemius", event_id, user_id=user.id, plan=plan,
+                                    action="day_pass")
             return {"ok": True, "action": "day_pass", "days": db.PASS_DAYS,
-                    "type": etype, "user": user.id}
+                    "type": etype, "user": user.id, "event_id": event_id}
         db.set_plan(user.id, plan)
         db.upsert_subscription(user.id, plan, "freemius", ref, "active", period_end)
-        return {"ok": True, "action": "activate", "plan": plan, "type": etype, "user": user.id}
+        db.finish_billing_event("freemius", event_id, user_id=user.id, plan=plan,
+                                action="activate")
+        return {"ok": True, "action": "activate", "plan": plan, "type": etype,
+                "user": user.id, "event_id": event_id}
 
+    db.finish_billing_event("freemius", event_id, user_id=user.id, plan=plan,
+                            action="ignored")
     return {"ok": True, "action": "ignored", "type": etype, "plan": plan}
 
 

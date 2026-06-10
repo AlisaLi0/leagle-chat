@@ -52,6 +52,19 @@ CREATE TABLE IF NOT EXISTS users (
     last_login        TEXT,
     UNIQUE(provider, provider_user_id)
 );
+CREATE TABLE IF NOT EXISTS oauth_identities (
+    user_id           INTEGER NOT NULL,
+    provider          TEXT NOT NULL,
+    provider_user_id  TEXT NOT NULL,
+    email             TEXT,
+    name              TEXT,
+    avatar_url        TEXT,
+    created_at        TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    PRIMARY KEY (provider, provider_user_id),
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_oauth_user ON oauth_identities(user_id);
 CREATE TABLE IF NOT EXISTS research_sessions (
     id          TEXT PRIMARY KEY,
     user_id     INTEGER NOT NULL,
@@ -93,6 +106,21 @@ CREATE TABLE IF NOT EXISTS pending_billing (
     resolved_at   TEXT                    -- set when matched to an account
 );
 CREATE INDEX IF NOT EXISTS idx_pending_email ON pending_billing(email) WHERE resolved_at IS NULL;
+CREATE TABLE IF NOT EXISTS billing_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider    TEXT NOT NULL,
+    event_id    TEXT NOT NULL,
+    event_type  TEXT,
+    email       TEXT,
+    plan        TEXT,
+    user_id     INTEGER,
+    action      TEXT NOT NULL DEFAULT 'received',
+    payload     TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    UNIQUE(provider, event_id)
+);
+CREATE INDEX IF NOT EXISTS idx_billing_events_user ON billing_events(user_id, created_at DESC);
 """
 
 
@@ -144,9 +172,89 @@ def init_db() -> None:
         except sqlite3.DatabaseError:
             pass
         conn.executescript(_SCHEMA)
+        _migrate_oauth_identities(conn)
+        _merge_duplicate_email_accounts(conn)
         conn.commit()
     finally:
         conn.close()
+
+
+def _plan_rank(plan: str) -> int:
+    return {"free": 0, "pro": 1, "day_pass": 2, "max": 3}.get(plan, 0)
+
+
+def _migrate_oauth_identities(conn: sqlite3.Connection) -> None:
+    """Backfill the identity table from legacy users(provider, provider_user_id)
+    rows. Safe to run every startup."""
+    rows = conn.execute(
+        "SELECT id, provider, provider_user_id, email, name, avatar_url, created_at, last_login FROM users"
+    ).fetchall()
+    now = _now()
+    for r in rows:
+        if not r["provider"] or not r["provider_user_id"]:
+            continue
+        conn.execute(
+            """INSERT OR IGNORE INTO oauth_identities
+               (user_id, provider, provider_user_id, email, name, avatar_url, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (r["id"], r["provider"], r["provider_user_id"], r["email"] or "",
+             r["name"] or "", r["avatar_url"] or "", r["created_at"] or now,
+             r["last_login"] or now),
+        )
+
+
+def _merge_account_rows(conn: sqlite3.Connection, source_id: int, target_id: int) -> None:
+    """Move all account-owned state from source -> target, then delete source.
+    Used only for same-email account repair/linking."""
+    if source_id == target_id:
+        return
+    target = conn.execute("SELECT * FROM users WHERE id=?", (target_id,)).fetchone()
+    source = conn.execute("SELECT * FROM users WHERE id=?", (source_id,)).fetchone()
+    if not target or not source:
+        return
+    best_plan = target["plan"]
+    if _plan_rank(source["plan"]) > _plan_rank(target["plan"]):
+        best_plan = source["plan"]
+    name = target["name"] or source["name"] or ""
+    avatar = target["avatar_url"] or source["avatar_url"] or ""
+    email = target["email"] or source["email"] or ""
+    conn.execute(
+        "UPDATE users SET email=?, name=?, avatar_url=?, plan=?, credits=credits+?, last_login=? WHERE id=?",
+        (email, name, avatar, best_plan, int(source["credits"] or 0), _now(), target_id),
+    )
+    conn.execute("UPDATE research_sessions SET user_id=? WHERE user_id=?", (target_id, source_id))
+    rows = conn.execute(
+        "SELECT month, questions FROM usage_monthly WHERE user_id=?", (source_id,)
+    ).fetchall()
+    for r in rows:
+        conn.execute(
+            """INSERT INTO usage_monthly (user_id, month, questions) VALUES (?, ?, ?)
+               ON CONFLICT(user_id, month) DO UPDATE SET questions = questions + excluded.questions""",
+            (target_id, r["month"], int(r["questions"] or 0)),
+        )
+    conn.execute("DELETE FROM usage_monthly WHERE user_id=?", (source_id,))
+    conn.execute("UPDATE subscriptions SET user_id=? WHERE user_id=?", (target_id, source_id))
+    conn.execute("UPDATE oauth_identities SET user_id=? WHERE user_id=?", (target_id, source_id))
+    conn.execute("UPDATE billing_events SET user_id=? WHERE user_id=?", (target_id, source_id))
+    conn.execute("DELETE FROM users WHERE id=?", (source_id,))
+
+
+def _merge_duplicate_email_accounts(conn: sqlite3.Connection) -> None:
+    """Repair legacy duplicate accounts that share the same non-empty email.
+    The earliest id becomes canonical; all sessions/usage/subs/identities move
+    onto it. Empty emails are intentionally not merged."""
+    groups = conn.execute(
+        """SELECT lower(email) AS e, GROUP_CONCAT(id) AS ids FROM users
+           WHERE email IS NOT NULL AND email <> ''
+           GROUP BY lower(email) HAVING COUNT(*) > 1"""
+    ).fetchall()
+    for g in groups:
+        ids = sorted(int(x) for x in str(g["ids"]).split(",") if x)
+        if not ids:
+            continue
+        target = ids[0]
+        for source in ids[1:]:
+            _merge_account_rows(conn, source, target)
 
 
 def _row_to_user(r: sqlite3.Row) -> User:
@@ -163,26 +271,84 @@ def upsert_user(provider: str, provider_user_id: str, *, email: str = "",
                 name: str = "", avatar_url: str = "") -> User:
     """Create or update the account for an OAuth identity, returning the User.
 
-    Keyed by (provider, provider_user_id) so the same person signing in again is
-    matched to their existing account (and profile fields refreshed).
+    Identity is keyed by (provider, provider_user_id), but the account is keyed
+    by a verified non-empty email when available. This lets the same person sign
+    in with Google and X and land on one account instead of splitting billing,
+    saved sessions, and quota across two rows.
     """
     conn = _connect()
     try:
         now = _now()
-        conn.execute(
-            """INSERT INTO users (provider, provider_user_id, email, name, avatar_url,
-                                  created_at, last_login)
-               VALUES (?, ?, ?, ?, ?, ?, ?)
-               ON CONFLICT(provider, provider_user_id) DO UPDATE SET
-                   email=excluded.email, name=excluded.name,
-                   avatar_url=excluded.avatar_url, last_login=excluded.last_login""",
-            (provider, str(provider_user_id), email, name, avatar_url, now, now),
-        )
-        conn.commit()
-        r = conn.execute(
-            "SELECT * FROM users WHERE provider=? AND provider_user_id=?",
-            (provider, str(provider_user_id)),
-        ).fetchone()
+        pid = str(provider_user_id)
+        clean_email = (email or "").strip().lower()
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            ident = conn.execute(
+                "SELECT user_id FROM oauth_identities WHERE provider=? AND provider_user_id=?",
+                (provider, pid),
+            ).fetchone()
+            if ident:
+                user_id = int(ident["user_id"])
+                if clean_email:
+                    other = conn.execute(
+                        "SELECT id FROM users WHERE lower(email)=lower(?) AND id<>? ORDER BY id LIMIT 1",
+                        (clean_email, user_id),
+                    ).fetchone()
+                    if other:
+                        target_id = int(other["id"])
+                        _merge_account_rows(conn, user_id, target_id)
+                        user_id = target_id
+                    conn.execute(
+                        "UPDATE users SET email=?, name=?, avatar_url=?, last_login=? WHERE id=?",
+                        (clean_email, name, avatar_url, now, user_id),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE users SET name=?, avatar_url=?, last_login=? WHERE id=?",
+                        (name, avatar_url, now, user_id),
+                    )
+            else:
+                existing = None
+                if clean_email:
+                    existing = conn.execute(
+                        "SELECT id FROM users WHERE lower(email)=lower(?) ORDER BY id LIMIT 1",
+                        (clean_email,),
+                    ).fetchone()
+                if existing:
+                    user_id = int(existing["id"])
+                    conn.execute(
+                        "UPDATE users SET email=?, name=COALESCE(NULLIF(name,''), ?), "
+                        "avatar_url=COALESCE(NULLIF(avatar_url,''), ?), last_login=? WHERE id=?",
+                        (clean_email, name, avatar_url, now, user_id),
+                    )
+                else:
+                    cur = conn.execute(
+                        """INSERT INTO users (provider, provider_user_id, email, name, avatar_url,
+                                              created_at, last_login)
+                           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (provider, pid, clean_email, name, avatar_url, now, now),
+                    )
+                    user_id = int(cur.lastrowid)
+                conn.execute(
+                    """INSERT INTO oauth_identities
+                       (user_id, provider, provider_user_id, email, name, avatar_url, created_at, updated_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (user_id, provider, pid, clean_email, name, avatar_url, now, now),
+                )
+            conn.execute(
+                "UPDATE oauth_identities SET email=?, name=?, avatar_url=?, updated_at=? "
+                "WHERE provider=? AND provider_user_id=?",
+                (clean_email, name, avatar_url, now, provider, pid),
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
+        r = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
         return _row_to_user(r)
     finally:
         conn.close()
@@ -501,6 +667,48 @@ def take_pending_billing(email: str) -> list[dict]:
             )
             conn.commit()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def add_billing_event(provider: str, event_id: str, event_type: str,
+                      email: str, payload: dict) -> bool:
+    """Insert a received billing webhook event. Returns False if this exact
+    provider/event_id was already seen, making webhook handling idempotent."""
+    if not event_id:
+        return True
+    body = json.dumps(payload or {}, ensure_ascii=False, sort_keys=True)
+    now = _now()
+    conn = _connect()
+    try:
+        try:
+            conn.execute(
+                """INSERT INTO billing_events
+                   (provider, event_id, event_type, email, payload, created_at, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                (provider, event_id, event_type, email or "", body, now, now),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
+    finally:
+        conn.close()
+
+
+def finish_billing_event(provider: str, event_id: str, *, user_id: int | None,
+                         plan: str | None, action: str) -> None:
+    """Update the audit row for a processed billing webhook event."""
+    if not event_id:
+        return
+    conn = _connect()
+    try:
+        conn.execute(
+            """UPDATE billing_events SET user_id=?, plan=?, action=?, updated_at=?
+               WHERE provider=? AND event_id=?""",
+            (user_id, plan or "", action or "processed", _now(), provider, event_id),
+        )
+        conn.commit()
     finally:
         conn.close()
 
