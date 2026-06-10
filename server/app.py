@@ -445,6 +445,18 @@ def health() -> dict:
     return {"status": "ok", "llm": llm.LLM_BASE_URL, "model": llm.LLM_MODEL}
 
 
+# Extension-less aliases for the legal pages (referenced by Google's OAuth
+# consent screen and Freemius checkout as /terms and /privacy).
+@app.get("/terms")
+def terms_alias():
+    return RedirectResponse("/terms.html", status_code=302)
+
+
+@app.get("/privacy")
+def privacy_alias():
+    return RedirectResponse("/privacy.html", status_code=302)
+
+
 # ── Billing (Freemius): public config, quota, and the signed webhook ────────
 
 @app.get("/api/config")
