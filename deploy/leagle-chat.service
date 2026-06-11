@@ -4,11 +4,17 @@ After=network.target
 
 [Service]
 Type=simple
+User=leagle-chat
+Group=leagle-chat
 WorkingDirectory=/opt/leagle-chat
 EnvironmentFile=/opt/leagle-chat/leagle.env
+Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStart=/opt/leagle-chat/venv/bin/python -m uvicorn server.app:app --host 127.0.0.1 --port 8600 --no-access-log
 Restart=on-failure
 RestartSec=3
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

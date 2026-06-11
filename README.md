@@ -74,6 +74,15 @@ python -m server.app          # or: uvicorn server.app:app --port 8600
 Search works with no keys at all (anonymous CourtListener). Set `LLM_*` to enable
 the conversational query-refinement + organizing layer.
 
+## Production Notes
+
+Production runs behind nginx on `127.0.0.1:8600` as the dedicated `leagle-chat`
+system user, not root. Keep `/opt/leagle-chat/leagle.env` and `leagle.db*` owned
+by `leagle-chat:leagle-chat` with mode `600`; code, static files, and the virtual
+environment can remain read-only. The systemd unit sets `UMask=0077`,
+`NoNewPrivileges=true`, `PrivateTmp=true`, and `PYTHONDONTWRITEBYTECODE=1` so the
+service does not need to write bytecode into the source tree.
+
 ## Roadmap
 
 - More sources (eCFR statutes/regs, CAP historical) fused into one search ✓
