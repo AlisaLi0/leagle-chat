@@ -127,6 +127,20 @@ def make_session_cookie(user_id: int) -> str:
     return _sign({"uid": int(user_id), "exp": int(time.time()) + COOKIE_MAX_AGE})
 
 
+def make_csrf_token(session_cookie: str | None) -> str:
+    """A stateless CSRF token bound to the signed session cookie."""
+    if not session_cookie:
+        return ""
+    sig = hmac.new(_SECRET, ("csrf:" + session_cookie).encode(), hashlib.sha256).digest()
+    return _b64e(sig)
+
+
+def valid_csrf_token(session_cookie: str | None, token: str | None) -> bool:
+    if not session_cookie or not token:
+        return False
+    return hmac.compare_digest(make_csrf_token(session_cookie), str(token))
+
+
 # ── PKCE (for providers that require it, e.g. X) ────────────────────────────
 
 def _b64url_nopad(raw: bytes) -> str:

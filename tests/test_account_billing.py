@@ -88,6 +88,33 @@ class AccountBillingTests(unittest.TestCase):
         self.assertEqual(result["action"], "activate")
         self.assertEqual(self.db.get_user(user.id).plan, "pro")
 
+    def test_freemius_event_requires_explicit_event_id(self):
+        self.db.upsert_user("google", "g-1", email="paid3@example.com", name="Paid 3")
+        evt = {
+            "type": "license.activated",
+            "objects": {
+                "user": {"email": "paid3@example.com"},
+                "license": {"id": "lic-no-event-id", "plan_id": "52037"},
+            },
+        }
+        result = self.billing.handle_event(evt)
+        self.assertEqual(result["action"], "missing_event_id")
+
+    def test_account_deletion_request_is_idempotent(self):
+        user = self.db.upsert_user("google", "g-del", email="delete@example.com", name="Delete")
+        first = self.db.request_account_deletion(user.id, user.email)
+        second = self.db.request_account_deletion(user.id, user.email)
+        self.assertEqual(first, second)
+
+    def test_csrf_token_is_bound_to_session_cookie(self):
+        import server.auth as auth
+
+        cookie = auth.make_session_cookie(123)
+        token = auth.make_csrf_token(cookie)
+        self.assertTrue(auth.valid_csrf_token(cookie, token))
+        self.assertFalse(auth.valid_csrf_token(cookie + "x", token))
+        self.assertFalse(auth.valid_csrf_token(cookie, "bad"))
+
 
 if __name__ == "__main__":
     unittest.main()

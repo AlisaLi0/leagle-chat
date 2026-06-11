@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import re
 import time
@@ -30,7 +31,7 @@ from collections.abc import AsyncIterator
 
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse
+from fastapi.responses import StreamingResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -42,9 +43,10 @@ from . import db, auth, billing
 HOST = os.getenv("LEAGLE_HOST", "127.0.0.1")
 PORT = int(os.getenv("LEAGLE_PORT", "8600"))
 WEB_DIR = os.getenv("LEAGLE_WEB_DIR", os.path.join(os.path.dirname(__file__), "..", "web"))
-# Comma-separated allowed origins for the browser front-end (e.g. GitHub Pages).
-# "*" allows any origin (fine here: the API is public, read-only, no cookies).
-CORS_ORIGINS = os.getenv("LEAGLE_CORS_ORIGINS", "*")
+# Comma-separated allowed origins for browser calls. Same-origin requests do not
+# need CORS; production sets this explicitly to juricodex.online/www. Without an
+# env override, keep it narrow for local/dev rather than falling back to "*".
+CORS_ORIGINS = os.getenv("LEAGLE_CORS_ORIGINS") or auth.PUBLIC_BASE or "http://127.0.0.1:8600"
 # Per-IP rate limit on /api/chat. Each chat turn fans out to several LLM calls
 # plus CourtListener / govinfo / eCFR requests, so it is the expensive endpoint
 # and the one whose abuse would burn our upstream quotas (govinfo 1000/h, the
@@ -59,12 +61,11 @@ ecfr = ECFR()
 uscode = USCode(os.getenv("GOVINFO_API_KEY", ""))
 db.init_db()
 app = FastAPI(title="leagle-chat")
+logger = logging.getLogger("leagle-chat")
 
 # Credentialed (cookie) auth only works same-origin or with an explicit origin
 # allow-list — the CORS spec forbids credentials with a "*" origin. The login /
-# saved-sessions UI is served same-origin from the backend (no CORS involved);
-# the wildcard cross-origin path (e.g. the GitHub Pages demo) stays read-only
-# and uncredentialed.
+# saved-sessions UI is served same-origin from the backend (no CORS involved).
 _cors_origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
 _allow_credentials = _cors_origins != ["*"]
 app.add_middleware(
@@ -72,7 +73,7 @@ app.add_middleware(
     allow_origins=_cors_origins,
     allow_credentials=_allow_credentials,
     allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-CSRF-Token"],
 )
 
 
@@ -865,6 +866,8 @@ async def chat(request: Request):
     user = _current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    if not _csrf_valid_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_csrf"})
     try:
         body = await request.json()
     except (ValueError, UnicodeDecodeError):
@@ -952,8 +955,9 @@ async def chat(request: Request):
                 else:
                     cases = await cl.search(question, mode="keyword", max_results=8)
             except httpx.HTTPError as exc:
+                logger.warning("resolver search failed: %s", exc)
                 refund()
-                yield _sse("error", {"message": f"resolver failed: {exc}"})
+                yield _sse("error", {"message": "Search service unavailable. Please try again."})
                 yield _sse("done", {})
                 return
             if not cases:
@@ -1054,8 +1058,9 @@ async def chat(request: Request):
             try:
                 cases = await cl.search(question, mode=mode, max_results=10)
             except httpx.HTTPError as exc:
+                logger.warning("toolkit search failed: %s", exc)
                 refund()
-                yield _sse("error", {"message": f"search failed: {exc}"})
+                yield _sse("error", {"message": "Search service unavailable. Please try again."})
                 yield _sse("done", {})
                 return
             if cases:
@@ -1099,8 +1104,9 @@ async def chat(request: Request):
                 try:
                     issue_cases = await cl.search(query, court=court, max_results=6)
                 except httpx.HTTPError as exc:
+                    logger.warning("issue search failed: %s", exc)
                     refund()
-                    yield _sse("error", {"message": f"search failed: {exc}"})
+                    yield _sse("error", {"message": "Search service unavailable. Please try again."})
                     yield _sse("done", {})
                     return
                 tried.add(query.lower())
@@ -1214,6 +1220,13 @@ def health() -> dict:
     return {"status": "ok", "llm": llm.LLM_BASE_URL, "model": llm.LLM_MODEL}
 
 
+@app.post("/api/csp-report")
+async def csp_report(request: Request):
+    raw = await request.body()
+    logger.warning("csp report: %s", raw[:4000].decode("utf-8", "replace"))
+    return Response(status_code=204)
+
+
 # Per-account sliding-minute rate limit for /api/verify-quote (cheap single
 # fetch, but unauthenticated-cheap is still a scraping lever — cap it).
 VERIFY_MAX_PER_MIN = int(os.getenv("LEAGLE_VERIFY_MAX_PER_MIN", "20"))
@@ -1242,6 +1255,8 @@ async def verify_quote(request: Request):
     user = _current_user(request)
     if not user:
         return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    if not _csrf_valid_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_csrf"})
     if _verify_over_limit(user.id):
         return JSONResponse(status_code=429, content={
             "error": "rate_limited",
@@ -1261,7 +1276,8 @@ async def verify_quote(request: Request):
     try:
         result = await cl.verify_quote(cluster_id, quote)
     except httpx.HTTPError as exc:
-        return JSONResponse(status_code=502, content={"error": f"verify failed: {exc}"})
+        logger.warning("quote verification failed: %s", exc)
+        return JSONResponse(status_code=502, content={"error": "verification_unavailable"})
     return result
 
 
@@ -1282,7 +1298,8 @@ async def case_details(cluster_id: str, request: Request):
         result = await cl.case_details(cluster_id, focus=focus)
         result["case_analysis"] = await _case_analysis(result, focus, language)
     except httpx.HTTPError as exc:
-        return JSONResponse(status_code=502, content={"error": f"details failed: {exc}"})
+        logger.warning("case details failed: %s", exc)
+        return JSONResponse(status_code=502, content={"error": "details_unavailable"})
     return result
 
 
@@ -1319,6 +1336,7 @@ def config(request: Request) -> dict:
             "remaining": max(0, int(plan["monthly_questions"]) - used),
             "day_pass_until": pass_end,
         }
+        out["csrf_token"] = auth.make_csrf_token(request.cookies.get(auth.COOKIE_NAME))
     return out
 
 
@@ -1392,6 +1410,13 @@ def _same_origin_request(request: Request) -> bool:
     except ValueError:
         return False
     return parsed.scheme in {"http", "https"} and parsed.netloc.lower() in allowed_hosts
+
+
+def _csrf_valid_request(request: Request) -> bool:
+    return auth.valid_csrf_token(
+        request.cookies.get(auth.COOKIE_NAME),
+        request.headers.get("x-csrf-token"),
+    )
 
 
 _CITE_RE = re.compile(r"\[(\d{1,3})\]")
@@ -1552,6 +1577,8 @@ async def auth_callback(provider: str, request: Request):
 def auth_logout(request: Request):
     if not _same_origin_request(request):
         return JSONResponse(status_code=403, content={"error": "bad_origin"})
+    if request.cookies.get(auth.COOKIE_NAME) and not _csrf_valid_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_csrf"})
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(auth.COOKIE_NAME, path=auth.COOKIE_PATH)
     return resp
@@ -1585,6 +1612,8 @@ async def sessions_save(request: Request):
         return JSONResponse(status_code=401, content={"error": "not_authenticated"})
     if not _same_origin_request(request):
         return JSONResponse(status_code=403, content={"error": "bad_origin"})
+    if not _csrf_valid_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_csrf"})
     body = await request.json()
     payload = body.get("payload")
     if not isinstance(payload, (list, dict)):
@@ -1608,7 +1637,22 @@ def sessions_delete(session_id: str, request: Request):
         return JSONResponse(status_code=401, content={"error": "not_authenticated"})
     if not _same_origin_request(request):
         return JSONResponse(status_code=403, content={"error": "bad_origin"})
+    if not _csrf_valid_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_csrf"})
     return {"ok": db.delete_session(user.id, session_id)}
+
+
+@app.post("/api/account/delete-request")
+def account_delete_request(request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    if not _same_origin_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_origin"})
+    if not _csrf_valid_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_csrf"})
+    request_id = db.request_account_deletion(user.id, user.email)
+    return {"ok": True, "request_id": request_id}
 
 
 # Static frontend (mounted last so /api/* takes precedence).

@@ -121,6 +121,16 @@ CREATE TABLE IF NOT EXISTS billing_events (
     UNIQUE(provider, event_id)
 );
 CREATE INDEX IF NOT EXISTS idx_billing_events_user ON billing_events(user_id, created_at DESC);
+CREATE TABLE IF NOT EXISTS account_deletion_requests (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    email       TEXT,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_delete_requests_user ON account_deletion_requests(user_id, status, created_at DESC);
 """
 
 
@@ -667,6 +677,29 @@ def take_pending_billing(email: str) -> list[dict]:
             )
             conn.commit()
         return [dict(r) for r in rows]
+    finally:
+        conn.close()
+
+
+def request_account_deletion(user_id: int, email: str) -> int:
+    """Create or return the open account-deletion request for a user."""
+    now = _now()
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT id FROM account_deletion_requests "
+            "WHERE user_id=? AND status='pending' ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        if row:
+            return int(row["id"])
+        cur = conn.execute(
+            "INSERT INTO account_deletion_requests (user_id, email, status, created_at, updated_at) "
+            "VALUES (?, ?, 'pending', ?, ?)",
+            (user_id, (email or "").strip().lower(), now, now),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
     finally:
         conn.close()
 

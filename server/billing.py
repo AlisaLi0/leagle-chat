@@ -26,7 +26,7 @@ from . import db
 PRODUCT_ID = os.getenv("FREEMIUS_PRODUCT_ID", "").strip()
 PUBLIC_KEY = os.getenv("FREEMIUS_PUBLIC_KEY", "").strip()
 SECRET_KEY = os.getenv("FREEMIUS_SECRET_KEY", "").strip()
-PORTAL_URL = os.getenv("FREEMIUS_PORTAL_URL", "").strip()
+PORTAL_URL = os.getenv("FREEMIUS_PORTAL_URL", "").strip() or "https://users.freemius.com/"
 SUPPORT_EMAIL = os.getenv("SUPPORT_EMAIL", "support@juricodex.online").strip()
 SANDBOX = os.getenv("FREEMIUS_SANDBOX", "false").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -125,9 +125,8 @@ def _parse_period_end(obj: dict) -> int | None:
 def _event_id(evt: dict) -> str:
     raw = evt.get("id") or evt.get("event_id") or evt.get("uuid")
     if raw:
-        return str(raw)
-    body = json.dumps(evt or {}, sort_keys=True, separators=(",", ":"))
-    return "sha256:" + hashlib.sha256(body.encode()).hexdigest()
+        return str(raw).strip()
+    return ""
 
 
 def handle_event(evt: dict) -> dict:
@@ -139,6 +138,8 @@ def handle_event(evt: dict) -> dict:
     """
     etype = (evt.get("type") or "").strip().lower()
     event_id = _event_id(evt)
+    if not event_id:
+        return {"ok": False, "action": "missing_event_id", "type": etype}
     objects = evt.get("objects") or {}
     user_obj = objects.get("user") or {}
     email = (user_obj.get("email") or evt.get("user_email") or "").strip().lower()

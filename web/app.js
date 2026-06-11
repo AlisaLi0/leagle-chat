@@ -82,6 +82,8 @@ const I18N = {
     'account.signOutTitle': 'Sign out',
     'account.upgrade': 'Upgrade',
     'account.manage': 'Manage billing',
+    'account.deleteRequest': 'Request account deletion',
+    'account.deleteConfirm': 'Request account deletion? We will review and process verified deletion requests within 30 days, except records we must keep for tax, fraud prevention, or legal obligations.',
     'account.emailWarn': 'Add a verified email with your sign-in provider before subscribing.',
     'account.usage': '{used}/{limit} this month',
     'account.plan': '{plan} plan',
@@ -106,6 +108,8 @@ const I18N = {
     'toast.checkoutOpening': 'Opening secure checkout…',
     'toast.checkoutFallback': 'Checkout popup could not load. Opening hosted checkout…',
     'toast.billingPortal': 'Use your Freemius receipt email to manage billing, or contact support.',
+    'toast.deleteRequested': 'Account deletion request received. We will review it within 30 days.',
+    'toast.deleteFailed': 'Could not submit the deletion request. Please contact support@juricodex.online.',
     'toast.authFailed': "Sign-in didn't complete. Please try again.",
     'label.question': 'Question',
     'label.authorities': 'Table of Authorities',
@@ -247,6 +251,8 @@ const I18N = {
     'account.signOutTitle': 'Cerrar sesión',
     'account.upgrade': 'Mejorar plan',
     'account.manage': 'Gestionar facturación',
+    'account.deleteRequest': 'Solicitar eliminación de cuenta',
+    'account.deleteConfirm': '¿Solicitar la eliminación de la cuenta? Revisaremos y procesaremos las solicitudes verificadas en un plazo de 30 días, salvo los registros que debamos conservar por impuestos, prevención de fraude u obligaciones legales.',
     'account.emailWarn': 'Agrega un correo verificado con tu proveedor de inicio de sesión antes de suscribirte.',
     'account.usage': '{used}/{limit} este mes',
     'account.plan': 'plan {plan}',
@@ -271,6 +277,8 @@ const I18N = {
     'toast.checkoutOpening': 'Abriendo checkout seguro…',
     'toast.checkoutFallback': 'No se pudo abrir el checkout emergente. Abriendo checkout alojado…',
     'toast.billingPortal': 'Usa el correo del recibo de Freemius para gestionar la facturación, o contacta soporte.',
+    'toast.deleteRequested': 'Solicitud de eliminación recibida. La revisaremos en un plazo de 30 días.',
+    'toast.deleteFailed': 'No se pudo enviar la solicitud de eliminación. Contacta a support@juricodex.online.',
     'toast.authFailed': 'El inicio de sesión no se completó. Inténtalo otra vez.',
     'label.question': 'Pregunta',
     'label.authorities': 'Tabla de autoridades',
@@ -412,6 +420,8 @@ const I18N = {
     'account.signOutTitle': '退出登录',
     'account.upgrade': '升级',
     'account.manage': '管理账单',
+    'account.deleteRequest': '请求删除账户',
+    'account.deleteConfirm': '确认请求删除账户？我们会在 30 天内审核并处理已验证的删除请求，但税务、防欺诈或法律义务要求保留的记录除外。',
     'account.emailWarn': '订阅前请先通过登录提供方添加并验证邮箱。',
     'account.usage': '本月 {used}/{limit}',
     'account.plan': '{plan} 计划',
@@ -436,6 +446,8 @@ const I18N = {
     'toast.checkoutOpening': '正在打开安全 checkout…',
     'toast.checkoutFallback': '无法加载 checkout 弹窗。正在打开托管 checkout…',
     'toast.billingPortal': '请使用 Freemius 收据邮箱管理账单，或联系支持。',
+    'toast.deleteRequested': '已收到账户删除请求。我们会在 30 天内审核。',
+    'toast.deleteFailed': '无法提交删除请求。请联系 support@juricodex.online。',
     'toast.authFailed': '登录未完成。请重试。',
     'label.question': '问题',
     'label.authorities': '权威资料表',
@@ -577,6 +589,8 @@ const I18N = {
     'account.signOutTitle': '登出',
     'account.upgrade': '升級',
     'account.manage': '管理帳單',
+    'account.deleteRequest': '請求刪除帳戶',
+    'account.deleteConfirm': '確認請求刪除帳戶？我們會在 30 天內審核並處理已驗證的刪除請求，但稅務、防詐欺或法律義務要求保留的紀錄除外。',
     'account.emailWarn': '訂閱前請先透過登入提供方新增並驗證電子郵件。',
     'account.usage': '本月 {used}/{limit}',
     'account.plan': '{plan} 方案',
@@ -601,6 +615,8 @@ const I18N = {
     'toast.checkoutOpening': '正在開啟安全 checkout…',
     'toast.checkoutFallback': '無法載入 checkout 彈窗。正在開啟託管 checkout…',
     'toast.billingPortal': '請使用 Freemius 收據電子郵件管理帳單，或聯絡支援。',
+    'toast.deleteRequested': '已收到帳戶刪除請求。我們會在 30 天內審核。',
+    'toast.deleteFailed': '無法提交刪除請求。請聯絡 support@juricodex.online。',
     'toast.authFailed': '登入未完成。請重試。',
     'label.question': '問題',
     'label.authorities': '權威資料表',
@@ -742,6 +758,8 @@ const I18N = {
     'account.signOutTitle': 'Déconnexion',
     'account.upgrade': 'Mettre à niveau',
     'account.manage': 'Gérer la facturation',
+    'account.deleteRequest': 'Demander la suppression du compte',
+    'account.deleteConfirm': 'Demander la suppression du compte ? Nous examinerons et traiterons les demandes vérifiées sous 30 jours, sauf les documents que nous devons conserver pour les taxes, la prévention de la fraude ou des obligations légales.',
     'account.emailWarn': 'Ajoutez une adresse e-mail vérifiée avec votre fournisseur de connexion avant de vous abonner.',
     'account.usage': '{used}/{limit} ce mois-ci',
     'account.plan': 'forfait {plan}',
@@ -766,6 +784,8 @@ const I18N = {
     'toast.checkoutOpening': 'Ouverture du paiement sécurisé…',
     'toast.checkoutFallback': 'La fenêtre de paiement n’a pas pu se charger. Ouverture du paiement hébergé…',
     'toast.billingPortal': 'Utilisez l’e-mail de reçu Freemius pour gérer la facturation, ou contactez le support.',
+    'toast.deleteRequested': 'Demande de suppression reçue. Nous l’examinerons sous 30 jours.',
+    'toast.deleteFailed': 'Impossible d’envoyer la demande de suppression. Contactez support@juricodex.online.',
     'toast.authFailed': 'La connexion n’a pas abouti. Réessayez.',
     'label.question': 'Question',
     'label.authorities': 'Table des autorités',
@@ -907,6 +927,8 @@ const I18N = {
     'account.signOutTitle': 'Sair',
     'account.upgrade': 'Fazer upgrade',
     'account.manage': 'Gerenciar cobrança',
+    'account.deleteRequest': 'Solicitar exclusão da conta',
+    'account.deleteConfirm': 'Solicitar exclusão da conta? Revisaremos e processaremos solicitações verificadas em até 30 dias, exceto registros que precisemos manter por impostos, prevenção de fraude ou obrigações legais.',
     'account.emailWarn': 'Adicione um e-mail verificado com seu provedor de login antes de assinar.',
     'account.usage': '{used}/{limit} este mês',
     'account.plan': 'plano {plan}',
@@ -931,6 +953,8 @@ const I18N = {
     'toast.checkoutOpening': 'Abrindo checkout seguro…',
     'toast.checkoutFallback': 'O popup de checkout não carregou. Abrindo checkout hospedado…',
     'toast.billingPortal': 'Use o e-mail do recibo Freemius para gerenciar a cobrança ou contate o suporte.',
+    'toast.deleteRequested': 'Solicitação de exclusão recebida. Vamos revisá-la em até 30 dias.',
+    'toast.deleteFailed': 'Não foi possível enviar a solicitação de exclusão. Contate support@juricodex.online.',
     'toast.authFailed': 'O login não foi concluído. Tente novamente.',
     'label.question': 'Pergunta',
     'label.authorities': 'Tabela de autoridades',
@@ -1072,6 +1096,8 @@ const I18N = {
     'account.signOutTitle': '로그아웃',
     'account.upgrade': '업그레이드',
     'account.manage': '결제 관리',
+    'account.deleteRequest': '계정 삭제 요청',
+    'account.deleteConfirm': '계정 삭제를 요청하시겠습니까? 확인된 삭제 요청은 30일 이내에 검토 및 처리합니다. 세금, 사기 방지 또는 법적 의무상 보관해야 하는 기록은 제외됩니다.',
     'account.emailWarn': '구독 전에 로그인 제공자에서 인증된 이메일을 추가하세요.',
     'account.usage': '이번 달 {used}/{limit}',
     'account.plan': '{plan} 플랜',
@@ -1096,6 +1122,8 @@ const I18N = {
     'toast.checkoutOpening': '보안 checkout 여는 중…',
     'toast.checkoutFallback': 'checkout 팝업을 불러올 수 없습니다. 호스팅 checkout을 엽니다…',
     'toast.billingPortal': 'Freemius 영수증 이메일로 결제를 관리하거나 지원팀에 문의하세요.',
+    'toast.deleteRequested': '계정 삭제 요청을 받았습니다. 30일 이내에 검토하겠습니다.',
+    'toast.deleteFailed': '삭제 요청을 제출할 수 없습니다. support@juricodex.online으로 문의하세요.',
     'toast.authFailed': '로그인이 완료되지 않았습니다. 다시 시도하세요.',
     'label.question': '질문',
     'label.authorities': '권위 자료 표',
@@ -1237,6 +1265,8 @@ const I18N = {
     'account.signOutTitle': 'ログアウト',
     'account.upgrade': 'アップグレード',
     'account.manage': '請求を管理',
+    'account.deleteRequest': 'アカウント削除をリクエスト',
+    'account.deleteConfirm': 'アカウント削除をリクエストしますか？確認済みの削除リクエストは30日以内に確認・処理します。ただし、税務、不正防止、法的義務により保持が必要な記録は除きます。',
     'account.emailWarn': '購読前にログインプロバイダーで確認済みメールを追加してください。',
     'account.usage': '今月 {used}/{limit}',
     'account.plan': '{plan} プラン',
@@ -1261,6 +1291,8 @@ const I18N = {
     'toast.checkoutOpening': '安全な checkout を開いています…',
     'toast.checkoutFallback': 'checkout ポップアップを読み込めませんでした。ホスト型 checkout を開きます…',
     'toast.billingPortal': 'Freemius の領収書メールで請求を管理するか、サポートに連絡してください。',
+    'toast.deleteRequested': 'アカウント削除リクエストを受け付けました。30日以内に確認します。',
+    'toast.deleteFailed': '削除リクエストを送信できませんでした。support@juricodex.online に連絡してください。',
     'toast.authFailed': 'ログインが完了しませんでした。もう一度お試しください。',
     'label.question': '質問',
     'label.authorities': '権威資料一覧',
@@ -1402,6 +1434,8 @@ const I18N = {
     'account.signOutTitle': 'Đăng xuất',
     'account.upgrade': 'Nâng cấp',
     'account.manage': 'Quản lý thanh toán',
+    'account.deleteRequest': 'Yêu cầu xóa tài khoản',
+    'account.deleteConfirm': 'Yêu cầu xóa tài khoản? Chúng tôi sẽ xem xét và xử lý yêu cầu đã xác minh trong vòng 30 ngày, trừ các hồ sơ phải giữ lại vì thuế, chống gian lận hoặc nghĩa vụ pháp lý.',
     'account.emailWarn': 'Hãy thêm email đã xác minh qua nhà cung cấp đăng nhập trước khi đăng ký.',
     'account.usage': '{used}/{limit} tháng này',
     'account.plan': 'gói {plan}',
@@ -1426,6 +1460,8 @@ const I18N = {
     'toast.checkoutOpening': 'Đang mở checkout an toàn…',
     'toast.checkoutFallback': 'Không tải được cửa sổ checkout. Đang mở checkout lưu trữ…',
     'toast.billingPortal': 'Dùng email nhận biên lai Freemius để quản lý thanh toán hoặc liên hệ hỗ trợ.',
+    'toast.deleteRequested': 'Đã nhận yêu cầu xóa tài khoản. Chúng tôi sẽ xem xét trong vòng 30 ngày.',
+    'toast.deleteFailed': 'Không thể gửi yêu cầu xóa. Vui lòng liên hệ support@juricodex.online.',
     'toast.authFailed': 'Đăng nhập chưa hoàn tất. Vui lòng thử lại.',
     'label.question': 'Câu hỏi',
     'label.authorities': 'Bảng nguồn có thẩm quyền',
@@ -2126,7 +2162,7 @@ async function send(text) {
     const resp = await fetch(API_BASE + '/api/chat', {
       method: 'POST',
       credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
       body: JSON.stringify({ messages, mode: currentMode, language: currentLang }),
       signal: ctrl.signal,
     });
@@ -2349,12 +2385,18 @@ let authReady = false;         // true once /api/auth/me has resolved
 let authPromise = null;        // the in-flight initial auth load
 let billingCfg = null;         // { product_id, public_key, plans } or null
 let planInfo = null;           // { plan, limit, used, remaining } for current user
+let csrfToken = '';            // session-bound token returned by /api/config
 
 document.getElementById('langSelect')?.addEventListener('change', (e) => setLanguage(e.target.value));
 applyI18n();
 
 function api(path, opts = {}) {
-  return fetch(API_BASE + path, { credentials: 'include', ...opts });
+  const method = String(opts.method || 'GET').toUpperCase();
+  const headers = new Headers(opts.headers || {});
+  if (csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    headers.set('X-CSRF-Token', csrfToken);
+  }
+  return fetch(API_BASE + path, { credentials: 'include', ...opts, headers });
 }
 
 const PROVIDER_LABEL = { github: 'GitHub', google: 'Google', x: 'X' };
@@ -2376,6 +2418,7 @@ function renderAccount() {
       ? `<button class="acc-upgrade" id="upgradeBtn">${escapeHtml(tr('account.upgrade'))}</button>` : '';
     const manage = (billingCfg && planName !== 'free')
       ? `<button class="acc-manage" id="manageBillingBtn">${escapeHtml(tr('account.manage'))}</button>` : '';
+    const deleteReq = `<button class="acc-delete" id="deleteAccountBtn">${escapeHtml(tr('account.deleteRequest'))}</button>`;
     const emailWarn = !hasBillingEmail()
       ? `<div class="acc-email-warn">${escapeHtml(tr('account.emailWarn'))}</div>`
       : '';
@@ -2390,10 +2433,12 @@ function renderAccount() {
       </div>
       ${emailWarn}
       ${upgrade}
-      ${manage}`;
+      ${manage}
+      ${deleteReq}`;
     document.getElementById('logoutBtn').addEventListener('click', logout);
     document.getElementById('upgradeBtn')?.addEventListener('click', () => openUpgradeModal());
     document.getElementById('manageBillingBtn')?.addEventListener('click', openBillingPortal);
+    document.getElementById('deleteAccountBtn')?.addEventListener('click', requestAccountDeletion);
   } else if (providers.length) {
     const btns = providers.map((p) =>
       `<button class="acc-signin" data-provider="${p}">
@@ -2640,6 +2685,7 @@ document.getElementById('upgradeClose')?.addEventListener('click', closeUpgradeM
 upgradeModal?.addEventListener('click', (e) => { if (e.target === upgradeModal) closeUpgradeModal(); });
 
 async function loadAuth() {
+  csrfToken = '';
   try {
     const [meResp, provResp, cfgResp] = await Promise.all([
       api('/api/auth/me'),
@@ -2652,9 +2698,10 @@ async function loadAuth() {
       const cfg = await cfgResp.json();
       billingCfg = cfg.billing ? cfg.freemius : null;
       planInfo = cfg.me || null;
+      csrfToken = cfg.csrf_token || '';
     }
   } catch {
-    me = null; providers = [];
+    me = null; providers = []; csrfToken = '';
   }
   authReady = true;
   renderAccount();
@@ -2666,6 +2713,18 @@ async function logout() {
   me = null; currentSessionId = null;
   renderAccount();
   refreshHistory();
+}
+
+async function requestAccountDeletion() {
+  if (!confirm(tr('account.deleteConfirm'))) return;
+  try {
+    const r = await api('/api/account/delete-request', { method: 'POST' });
+    if (r.status === 401) { me = null; renderAccount(); openLoginModal(); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast(tr('toast.deleteRequested'), 7000);
+  } catch {
+    showToast(tr('toast.deleteFailed'), 7000);
+  }
 }
 
 // Local (signed-out) history helpers.
