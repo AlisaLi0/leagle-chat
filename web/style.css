@@ -39,14 +39,14 @@ html, body {
   overflow: hidden;
 }
 .side-brand {
-  display: flex; align-items: center; gap: 9px; position: relative;
+  display: flex; align-items: center; gap: 9px;
   padding: 18px 20px 16px;
 }
 .side-brand .logo { font-size: 22px; color: var(--accent); }
-.side-brand .name { font-weight: 800; font-size: 20px; letter-spacing: .2px; position: relative; }
+.side-brand .name { font-weight: 800; font-size: 20px; letter-spacing: .2px; }
 .side-brand .brand-dot { color: var(--accent); }
 .beta-badge {
-  position: absolute; left: 230px; top: 20px;
+  position: relative; top: 3px; margin-left: 5px;
   display: inline-flex; align-items: center; justify-content: center;
   padding: 1px 4px; border: 1px solid var(--line); border-radius: 999px;
   background: var(--panel); color: var(--muted);
@@ -94,7 +94,7 @@ html, body {
   position: sticky; top: 0; z-index: 5;
 }
 .hamburger { display: none; background: none; border: none; font-size: 20px; cursor: pointer; color: var(--ink); }
-.topbar-title { font-weight: 700; font-size: 16px; }
+.topbar-title { display: inline-flex; align-items: baseline; font-weight: 700; font-size: 16px; }
 .topbar-tag { color: var(--muted); font-size: 13px; margin-left: auto; }
 
 .chat { flex: 1; overflow-y: auto; padding: 26px 18px 8px; }
