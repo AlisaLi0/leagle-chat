@@ -885,15 +885,46 @@ const upgradeModal = document.getElementById('upgradeModal');
 let fsLoading = null;
 let billingCycle = 'monthly';
 
+function loadScriptOnce(src, id, ready) {
+  if (ready && ready()) return Promise.resolve();
+  const existing = document.querySelector(`script[data-loader-id="${id}"]`);
+  if (existing && existing.dataset.loaded === '1') return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = existing || document.createElement('script');
+    script.dataset.loaderId = id;
+    const cleanup = () => {
+      script.removeEventListener('load', onLoad);
+      script.removeEventListener('error', onError);
+    };
+    const onLoad = () => {
+      script.dataset.loaded = '1';
+      cleanup();
+      resolve();
+    };
+    const onError = () => {
+      cleanup();
+      reject(new Error(`Failed to load ${src}`));
+    };
+    script.addEventListener('load', onLoad, { once: true });
+    script.addEventListener('error', onError, { once: true });
+    if (!existing) {
+      script.src = src;
+      document.head.appendChild(script);
+    }
+  }).then(() => {
+    if (ready && !ready()) throw new Error(`${id} did not initialize`);
+  });
+}
+
 function loadFreemius() {
   if (window.FS && window.FS.Checkout) return Promise.resolve();
   if (fsLoading) return fsLoading;
-  fsLoading = new Promise((resolve, reject) => {
-    const s = document.createElement('script');
-    s.src = 'https://checkout.freemius.com/checkout.min.js';
-    s.onload = resolve; s.onerror = reject;
-    document.head.appendChild(s);
-  });
+  fsLoading = (async () => {
+    // Freemius checkout.min.js expects a global jQuery on some builds.
+    await loadScriptOnce('https://code.jquery.com/jquery-3.7.1.min.js', 'jquery', () => !!window.jQuery);
+    await loadScriptOnce('https://checkout.freemius.com/checkout.min.js', 'freemius-checkout',
+      () => !!(window.FS && window.FS.Checkout));
+  })();
   return fsLoading;
 }
 
@@ -957,7 +988,7 @@ function openUpgradeModal(quota) {
   upgradeModal.querySelectorAll('.cycle-btn').forEach((b) =>
     b.addEventListener('click', () => { billingCycle = b.dataset.cycle || 'monthly'; openUpgradeModal(quota); }));
   upgradeModal.querySelectorAll('.up-plan').forEach((b) =>
-    b.addEventListener('click', () => startCheckout(b.dataset.planId, b.dataset.pricingId, b.dataset.cycle)));
+    b.addEventListener('click', () => startCheckout(b.dataset.planId, b.dataset.pricingId, b.dataset.cycle, b)));
   upgradeModal.classList.add('open');
   upgradeModal.setAttribute('aria-hidden', 'false');
 }
@@ -968,31 +999,48 @@ function closeUpgradeModal() {
   upgradeModal.setAttribute('aria-hidden', 'true');
 }
 
-async function startCheckout(planId, pricingId, cycle) {
+async function startCheckout(planId, pricingId, cycle, button) {
   if (!billingCfg) return;
   if (!hasBillingEmail()) {
     showToast('Please add and verify an email with your sign-in provider before subscribing.');
     return;
   }
-  try { await loadFreemius(); } catch { return; }
-  const handler = new window.FS.Checkout({
-    product_id: billingCfg.product_id,
-    public_key: billingCfg.public_key,
-  });
-  const opts = {
-    plan_id: planId,
-    pricing_id: pricingId || undefined,
-    billing_cycle: cycle || undefined,
-    sandbox: !!billingCfg.sandbox,
-    name: 'JuriCodex',
-    user_email: (me && me.email) || undefined,
-    purchaseCompleted: () => {
-      // Freemius confirms purchase; the webhook flips our DB. Re-pull our state.
-      setTimeout(() => loadAuth(), 1500);
-    },
-    success: () => { closeUpgradeModal(); },
-  };
-  handler.open(opts);
+  if (button) {
+    button.disabled = true;
+    button.classList.add('loading');
+    button.setAttribute('aria-busy', 'true');
+  }
+  showToast('Opening secure checkout…', 1400);
+  try {
+    await loadFreemius();
+    const handler = new window.FS.Checkout({
+      product_id: billingCfg.product_id,
+      public_key: billingCfg.public_key,
+    });
+    const opts = {
+      plan_id: planId,
+      pricing_id: pricingId || undefined,
+      billing_cycle: cycle || undefined,
+      sandbox: !!billingCfg.sandbox,
+      name: 'JuriCodex',
+      user_email: (me && me.email) || undefined,
+      purchaseCompleted: () => {
+        // Freemius confirms purchase; the webhook flips our DB. Re-pull our state.
+        setTimeout(() => loadAuth(), 1500);
+      },
+      success: () => { closeUpgradeModal(); },
+    };
+    handler.open(opts);
+  } catch (err) {
+    console.error('Freemius checkout failed', err);
+    showToast('Checkout could not load. Please disable script blockers and try again.');
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.classList.remove('loading');
+      button.removeAttribute('aria-busy');
+    }
+  }
 }
 
 function openBillingPortal() {

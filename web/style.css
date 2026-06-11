@@ -499,6 +499,7 @@ html, body {
   padding: 13px 14px; cursor: pointer; text-align: left;
 }
 .up-plan:hover { border-color: var(--accent); background: var(--accent-soft); }
+.up-plan.loading { opacity: .72; cursor: wait; }
 .up-featured { border-color: rgba(91,91,214,.35); box-shadow: inset 3px 0 0 var(--accent); }
 .up-plan-name { font-size: 14px; font-weight: 700; color: var(--ink); }
 .up-plan-price { font-size: 14px; font-weight: 700; color: var(--accent-2); text-align: right; }
