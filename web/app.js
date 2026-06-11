@@ -801,6 +801,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLogin
 // ── Upgrade / pricing modal + Freemius checkout ─────────────────────────────
 const upgradeModal = document.getElementById('upgradeModal');
 let fsLoading = null;
+let billingCycle = 'monthly';
 
 function loadFreemius() {
   if (window.FS && window.FS.Checkout) return Promise.resolve();
@@ -815,9 +816,19 @@ function loadFreemius() {
 }
 
 const PLAN_BLURB = {
-  pro: { name: 'Pro', price: '$9.98/mo', pitch: 'Regular JuriCodex Platform workspace access: 300 source-backed research runs a month, verification, history, and export.' },
-  max: { name: 'Max', price: '$29.98/mo', pitch: 'High-volume Platform workspace access for heavier research, Brief Review, quote checks, export, and saved sessions.' },
-  day_pass: { name: '3-Day Pass', price: '$2.98', pitch: 'Try Max-level Platform access for 3 days without a subscription.' },
+  pro: {
+    name: 'Pro', monthly: '$9.98/mo', yearly: 'Yearly billing',
+    pitch: '300 source-backed research runs, verification, history, and export.',
+  },
+  max: {
+    name: 'Max', monthly: '$29.98/mo', yearly: 'Yearly billing',
+    pitch: 'High-volume workspace for Brief Review, quote checks, export, and saved sessions.',
+    featured: true,
+  },
+  day_pass: {
+    name: '3-Day Pass', monthly: '$2.98', yearly: '$2.98',
+    pitch: 'Try Max-level access for 3 days. No subscription.', oneoff: true,
+  },
 };
 
 function hasBillingEmail() {
@@ -838,19 +849,29 @@ function openUpgradeModal(quota) {
        your sign-in provider before subscribing. We need a real verified email to
        attach the purchase to your account.</p>`
     : '';
+  const cycle = billingCycle === 'annual' ? 'annual' : 'monthly';
+  const cycleTabs = `<div class="billing-cycle" role="tablist" aria-label="Billing cycle">
+      <button type="button" class="cycle-btn ${cycle === 'monthly' ? 'active' : ''}" data-cycle="monthly">Monthly</button>
+      <button type="button" class="cycle-btn ${cycle === 'annual' ? 'active' : ''}" data-cycle="annual">Yearly</button>
+    </div>`;
   const cards = Object.entries(billingCfg.plans || {}).map(([ourPlan, planId]) => {
     const b = PLAN_BLURB[ourPlan] || { name: ourPlan, price: '', pitch: '' };
     const pricingId = (billingCfg.pricing || {})[ourPlan] || '';
-    return `<button class="up-plan" data-plan-id="${escapeHtml(planId)}" data-pricing-id="${escapeHtml(pricingId)}">
-        <span class="up-plan-name">${b.name}</span>
-        <span class="up-plan-price">${b.price}</span>
+    const price = b.oneoff ? b.monthly : (cycle === 'annual' ? b.yearly : b.monthly);
+    const cycleLabel = b.oneoff ? 'One-time' : (cycle === 'annual' ? 'Annual plan' : 'Monthly plan');
+    return `<button class="up-plan ${b.featured ? 'up-featured' : ''}" data-plan-id="${escapeHtml(planId)}" data-pricing-id="${escapeHtml(pricingId)}" data-cycle="${b.oneoff ? '' : cycle}">
+        <span class="up-plan-name">${escapeHtml(b.name)}</span>
+        <span class="up-plan-price">${escapeHtml(price)}</span>
+        <span class="up-plan-cycle">${escapeHtml(cycleLabel)}</span>
         <span class="up-plan-pitch">${b.pitch}</span>
       </button>`;
   }).join('');
-  const billingNote = `<div class="up-note"><strong>Monthly plans renew until canceled.</strong> Stop future renewals from billing management or by contacting support. Payments are processed securely by Freemius; JuriCodex never stores card details.</div>`;
-  upgradeModal.querySelector('.up-body').innerHTML = sub + emailNote + cards + billingNote;
+  const billingNote = `<div class="up-note"><strong>Subscriptions renew until canceled.</strong> Stop future renewals from billing management or support. Payments are processed by Freemius.</div>`;
+  upgradeModal.querySelector('.up-body').innerHTML = sub + emailNote + cycleTabs + cards + billingNote;
+  upgradeModal.querySelectorAll('.cycle-btn').forEach((b) =>
+    b.addEventListener('click', () => { billingCycle = b.dataset.cycle || 'monthly'; openUpgradeModal(quota); }));
   upgradeModal.querySelectorAll('.up-plan').forEach((b) =>
-    b.addEventListener('click', () => startCheckout(b.dataset.planId, b.dataset.pricingId)));
+    b.addEventListener('click', () => startCheckout(b.dataset.planId, b.dataset.pricingId, b.dataset.cycle)));
   upgradeModal.classList.add('open');
   upgradeModal.setAttribute('aria-hidden', 'false');
 }
@@ -861,7 +882,7 @@ function closeUpgradeModal() {
   upgradeModal.setAttribute('aria-hidden', 'true');
 }
 
-async function startCheckout(planId, pricingId) {
+async function startCheckout(planId, pricingId, cycle) {
   if (!billingCfg) return;
   if (!hasBillingEmail()) {
     showToast('Please add and verify an email with your sign-in provider before subscribing.');
@@ -875,6 +896,7 @@ async function startCheckout(planId, pricingId) {
   const opts = {
     plan_id: planId,
     pricing_id: pricingId || undefined,
+    billing_cycle: cycle || undefined,
     sandbox: !!billingCfg.sandbox,
     name: 'JuriCodex',
     user_email: (me && me.email) || undefined,
