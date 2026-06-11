@@ -854,7 +854,11 @@ function openUpgradeModal(quota) {
       <button type="button" class="cycle-btn ${cycle === 'monthly' ? 'active' : ''}" data-cycle="monthly">Monthly</button>
       <button type="button" class="cycle-btn ${cycle === 'annual' ? 'active' : ''}" data-cycle="annual">Yearly <span class="cycle-save">Save 2 months</span></button>
     </div>`;
-  const cards = Object.entries(billingCfg.plans || {}).map(([ourPlan, planId]) => {
+  const planOrder = ['day_pass', 'pro', 'max'];
+  const planEntries = planOrder
+    .filter((p) => (billingCfg.plans || {})[p])
+    .map((p) => [p, billingCfg.plans[p]]);
+  const cards = planEntries.map(([ourPlan, planId]) => {
     const b = PLAN_BLURB[ourPlan] || { name: ourPlan, price: '', pitch: '' };
     const pricingId = (billingCfg.pricing || {})[ourPlan] || '';
     const price = b.oneoff ? b.monthly : (cycle === 'annual' ? b.yearly : b.monthly);
@@ -866,7 +870,7 @@ function openUpgradeModal(quota) {
         <span class="up-plan-pitch">${b.pitch}</span>
       </button>`;
   }).join('');
-  const billingNote = `<div class="up-note"><strong>Subscriptions renew until canceled.</strong> Stop future renewals from billing management or support. Payments are processed by Freemius.</div>`;
+  const billingNote = `<div class="up-note">By continuing, you agree to the <a href="/terms.html" target="_blank" rel="noopener">Terms</a> and acknowledge the <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a>.</div>`;
   upgradeModal.querySelector('.up-body').innerHTML = sub + emailNote + cycleTabs + cards + billingNote;
   upgradeModal.querySelectorAll('.cycle-btn').forEach((b) =>
     b.addEventListener('click', () => { billingCycle = b.dataset.cycle || 'monthly'; openUpgradeModal(quota); }));
