@@ -221,14 +221,21 @@ html, body {
 }
 .avail.yes { color: var(--good); background: var(--good-soft); border-color: #bce4cf; }
 .avail.no, .avail.warn { color: var(--warn); background: #fff6e6; border-color: #f1d5a4; }
-.focused-passages, .citing-cases { margin-top: 9px; }
+.focused-passages, .citing-cases, .case-analysis { margin-top: 9px; }
+.case-analysis p { margin: 5px 0; line-height: 1.45; }
+.case-analysis ul { margin: 6px 0 0; padding-left: 18px; }
+.case-analysis li { margin: 3px 0; }
+.analysis-limits { margin-top: 6px; color: var(--muted); }
 .focused-passages blockquote {
   margin: 6px 0 0; padding: 7px 9px; border-left: 3px solid var(--accent);
   background: var(--panel); border-radius: 7px; color: var(--ink); line-height: 1.45;
 }
-.citing-cases ul { margin: 5px 0 0; padding-left: 18px; }
+.citing-group { margin-top: 6px; }
+.citing-group > span { color: var(--muted); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; }
+.citing-cases ul { margin: 4px 0 0; padding-left: 18px; }
 .citing-cases li { margin: 3px 0; }
 .citing-cases span { color: var(--muted); }
+.citing-cases em { color: var(--good); font-style: normal; font-family: ui-monospace, monospace; }
 .citing-cases a { color: var(--accent-2); text-decoration: none; font-weight: 600; }
 .copy-cite {
   margin-left: 7px; border: 1px solid var(--line); border-radius: 7px; background: var(--panel);

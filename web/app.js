@@ -244,7 +244,10 @@ function renderCaseDetailsBox(box, details) {
   const citations = (details.citations || []).slice(0, 6).join(' · ');
   const availability = details.source_availability || {};
   const citing = (details.citing_cases || {}).cases || [];
+  const latestCiting = (details.citing_cases || {}).latest || [];
+  const strongCiting = (details.citing_cases || {}).most_cited || [];
   const passages = details.focused_passages || [];
+  const analysis = details.case_analysis || {};
   const opinions = (details.opinions || []).map((op) => `
     <li>
       <span class="op-type">${escapeHtml(op.type || 'opinion')}</span>
@@ -258,6 +261,7 @@ function renderCaseDetailsBox(box, details) {
       <span class="avail ${availability.has_text ? 'yes' : 'no'}">${availability.has_text ? 'Opinion text' : 'No text'}</span>
       <span class="avail ${availability.has_pdf ? 'yes' : 'no'}">${availability.has_pdf ? 'PDF available' : 'No PDF'}</span>
       <span class="avail">${availability.opinions_found || 0}/${availability.opinions_total || 0} opinions checked</span>
+      <span class="avail">${availability.text_count || 0} text · ${availability.pdf_count || 0} PDF</span>
       ${availability.partial ? '<span class="avail warn">Partial inventory</span>' : ''}
     </div>
     <div class="detail-grid">
@@ -267,9 +271,15 @@ function renderCaseDetailsBox(box, details) {
       ${details.precedential_status ? `<div><b>Status</b><span>${escapeHtml(details.precedential_status)}</span></div>` : ''}
     </div>
     ${citations ? `<div class="detail-cites"><b>Citations</b> ${escapeHtml(citations)} <button type="button" class="copy-cite" data-cite="${escapeHtml((details.citations || [])[0] || citations)}">Copy citation</button></div>` : ''}
+    ${analysis.summary ? `<div class="case-analysis"><b>Case analysis</b><p>${escapeHtml(analysis.summary)}</p>${analysis.why_it_matters ? `<p><strong>Why it matters:</strong> ${escapeHtml(analysis.why_it_matters)}</p>` : ''}${(analysis.key_points || []).length ? `<ul>${analysis.key_points.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>` : ''}${(analysis.limits || []).length ? `<div class="analysis-limits"><strong>Limits:</strong> ${escapeHtml(analysis.limits.join('; '))}</div>` : ''}</div>` : ''}
     ${passages.length ? `<div class="focused-passages"><b>Focused passages</b>${passages.map((p) => `<blockquote>${escapeHtml(p.text || '')}</blockquote>`).join('')}</div>` : ''}
-    ${citing.length ? `<div class="citing-cases"><b>Citing cases</b><ul>${citing.map((c) => `<li>${escapeHtml(c.title || '')}${c.date ? ` <span>${escapeHtml(c.date)}</span>` : ''}${c.url ? ` <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener">open</a>` : ''}</li>`).join('')}</ul></div>` : ''}
+    ${(latestCiting.length || strongCiting.length || citing.length) ? `<div class="citing-cases"><b>Citing cases</b>${renderCitingGroup('Latest', latestCiting)}${renderCitingGroup('Most cited', strongCiting)}${(!latestCiting.length && !strongCiting.length) ? renderCitingGroup('Selected', citing) : ''}</div>` : ''}
     ${opinions ? `<div class="opinion-inventory"><b>Opinion inventory</b><ul>${opinions}</ul></div>` : '<div class="detail-empty">No opinion inventory was available.</div>'}`;
+}
+
+function renderCitingGroup(label, cases) {
+  if (!cases || !cases.length) return '';
+  return `<div class="citing-group"><span>${escapeHtml(label)}</span><ul>${cases.slice(0, 5).map((c) => `<li>${escapeHtml(c.title || '')}${c.date ? ` <span>${escapeHtml(c.date)}</span>` : ''}${c.citations && c.citations.length ? ` <em>${escapeHtml(c.citations[0])}</em>` : ''}${c.url ? ` <a href="${escapeHtml(c.url)}" target="_blank" rel="noopener">open</a>` : ''}</li>`).join('')}</ul></div>`;
 }
 
 function renderBriefReview(turnEl, payload) {

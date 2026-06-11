@@ -304,19 +304,31 @@ class CourtListener:
         return count, last
 
     async def citing_cases(self, cluster_id: str, *, limit: int = 5) -> dict:
-        """Return later cases citing this cluster (best-effort)."""
+        """Return later cases citing this cluster (best-effort).
+
+        We collect both the latest citing cases and the most-cited citing cases.
+        The UI can use this as a lightweight update/treatment workbench without
+        pretending to be a full citator.
+        """
         cid = str(cluster_id or "").strip()
         if not cid.isdigit():
-            return {"count": 0, "cases": []}
+            return {"count": 0, "cases": [], "latest": [], "most_cited": []}
         try:
-            data = await self._get(
-                "/search/",
-                {"q": f"cites:({cid})", "type": "o", "order_by": "dateFiled desc"},
+            latest_data, cited_data = await asyncio.gather(
+                self._get("/search/", {"q": f"cites:({cid})", "type": "o", "order_by": "dateFiled desc"}),
+                self._get("/search/", {"q": f"cites:({cid})", "type": "o", "order_by": "citeCount desc"}),
             )
         except Exception:
-            return {"count": 0, "cases": []}
-        rows = (data.get("results") or [])[:limit]
-        return {"count": int(data.get("count") or 0), "cases": [self._parse(r).to_dict() for r in rows]}
+            return {"count": 0, "cases": [], "latest": [], "most_cited": []}
+        latest_rows = (latest_data.get("results") or [])[:limit]
+        cited_rows = (cited_data.get("results") or [])[:limit]
+        combined = _rrf_fuse([latest_rows, cited_rows])[:limit]
+        return {
+            "count": int(latest_data.get("count") or cited_data.get("count") or 0),
+            "cases": [self._parse(r).to_dict() for r in combined],
+            "latest": [self._parse(r).to_dict() for r in latest_rows],
+            "most_cited": [self._parse(r).to_dict() for r in cited_rows],
+        }
 
     async def attach_treatment(self, cases: list[Case], *, top: int = 6) -> None:
         """Populate cited_by / last_cited / treatment for the first `top` cases,
@@ -464,6 +476,8 @@ class CourtListener:
                 "has_pdf": has_pdf,
                 "opinions_found": len(opinions),
                 "opinions_total": len(op_ids),
+                "pdf_count": sum(1 for op in opinions if op.get("pdf_url")),
+                "text_count": sum(1 for op in opinions if op.get("has_text")),
                 "partial": len(opinions) < len(op_ids),
             },
             "citing_cases": citing,

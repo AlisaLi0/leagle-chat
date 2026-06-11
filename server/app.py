@@ -213,9 +213,22 @@ _BRIEF_SUPPORT_SYSTEM = (
     "passages from that case. Decide whether the case supports the proposition. "
     "Return ONLY JSON: {\"status\":\"Supports|Weak support|Unclear|Needs review\","
     "\"quote_accuracy\":\"Accurate|Not found|No quote|Needs review\","
-    "\"reason\":\"one concise sentence\"}. Be conservative. If the passages do "
-    "not squarely support the proposition, use Weak support or Unclear. Never say "
-    "a case supports a proposition based on the case name alone."
+    "\"reason\":\"one concise sentence\"}. Use Supports only when the passage "
+    "directly supports the extracted proposition. Use Weak support when the case "
+    "is related but the proposition is broader/narrower than the passage. Use "
+    "Unclear when the provided passages do not let you decide. Use Needs review "
+    "for procedural ambiguity or thin source text. Never say a case supports a "
+    "proposition based on the case name alone."
+)
+
+_CASE_ANALYSIS_SYSTEM = (
+    "You write source-grounded case workbench notes for legal research. Given case "
+    "metadata and short passages from the real opinion, return ONLY JSON: "
+    "{\"summary\":\"2-3 sentence source-grounded summary\","
+    "\"why_it_matters\":\"one concise sentence\","
+    "\"key_points\":[\"point from source text\"],"
+    "\"limits\":[\"limits/uncertainties\"]}. Do not invent facts, holdings, "
+    "or procedural history. If passages are thin, say the summary is limited."
 )
 
 
@@ -357,6 +370,37 @@ async def _brief_support_check(ref: dict, case: object, quote_check: dict | None
         qa = "Accurate" if quote_check and quote_check.get("found") else ("No quote" if not quote else "Needs review")
     return {"status": status, "quote_accuracy": qa,
             "reason": (out.get("reason") if isinstance(out, dict) else "") or "Review the source passage before relying on this citation."}
+
+
+async def _case_analysis(details: dict, focus: str = "") -> dict:
+    passages = details.get("focused_passages") or []
+    if not passages:
+        return {}
+    payload = {
+        "title": details.get("title"),
+        "court": details.get("court"),
+        "date": details.get("date"),
+        "citations": details.get("citations") or [],
+        "focus": focus,
+        "source_availability": details.get("source_availability") or {},
+        "passages": [p.get("text", "")[:900] for p in passages[:4]],
+    }
+    convo = [
+        {"role": "system", "content": _CASE_ANALYSIS_SYSTEM},
+        {"role": "user", "content": json.dumps(payload, ensure_ascii=False)},
+    ]
+    try:
+        out = await llm.complete_json(convo, max_tokens=450)
+    except (httpx.HTTPError, KeyError, ValueError):
+        out = {}
+    if not isinstance(out, dict):
+        return {}
+    return {
+        "summary": str(out.get("summary") or "")[:900],
+        "why_it_matters": str(out.get("why_it_matters") or "")[:500],
+        "key_points": [str(x)[:300] for x in (out.get("key_points") or [])[:5]],
+        "limits": [str(x)[:300] for x in (out.get("limits") or [])[:4]],
+    }
 
 
 async def _organize(question: str, cases: list, statutes: list | None = None,
@@ -792,6 +836,7 @@ async def case_details(cluster_id: str, request: Request):
     focus = request.query_params.get("focus", "")[:800]
     try:
         result = await cl.case_details(cluster_id, focus=focus)
+        result["case_analysis"] = await _case_analysis(result, focus)
     except httpx.HTTPError as exc:
         return JSONResponse(status_code=502, content={"error": f"details failed: {exc}"})
     return result
