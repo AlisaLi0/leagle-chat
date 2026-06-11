@@ -735,7 +735,7 @@ function renderAccount() {
           <div class="acc-name">${escapeHtml(me.name || me.email || 'Signed in')}</div>
           <div class="acc-plan">${escapeHtml(planName)} · ${usage}</div>
         </div>
-        <button class="acc-logout" id="logoutBtn" title="Sign out">⏋</button>
+        <button class="acc-logout" id="logoutBtn" title="Sign out">Sign out</button>
       </div>
       ${emailWarn}
       ${upgrade}

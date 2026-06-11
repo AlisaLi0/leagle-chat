@@ -482,8 +482,8 @@ html, body {
 .acc-plan { font-size: 11px; color: var(--muted); text-transform: capitalize; }
 .acc-logout {
   flex: 0 0 auto; background: transparent; border: 1px solid var(--line);
-  color: var(--muted); border-radius: 8px; width: 28px; height: 28px;
-  font-size: 14px; cursor: pointer;
+  color: var(--muted); border-radius: 8px; padding: 5px 8px;
+  font-size: 11.5px; font-weight: 700; cursor: pointer;
 }
 .acc-logout:hover { border-color: var(--warn); color: var(--warn); }
 
