@@ -1,8 +1,8 @@
 # JuriCodex
 
 Conversational retrieval over **real US case law**. Ask a legal question in plain
-English; JuriCodex finds the actual court opinions behind it — with citations and
-links you can open and read yourself.
+language; JuriCodex finds the actual court opinions behind it — with citations
+and links you can open and read yourself.
 
 > Repo/service id: `leagle-chat` (kept as the internal name; the product brand is
 > **JuriCodex**).
@@ -26,6 +26,16 @@ post-*Mata v. Avianca* hallucination risk.
 If the LLM endpoint is down, **retrieval still works**: the real cases are
 returned without the organizing layer. The core — real cases — never depends on
 the model being up.
+
+## Multilingual UX
+
+The web app supports English, Spanish, Simplified Chinese, Traditional Chinese,
+French, Portuguese, Korean, Japanese, and Vietnamese UI. The selected language is
+saved in the browser and sent with each research request so research plans,
+explanations, Brief Review support notes, and case workbench summaries are
+written in that language. US case names, reporter citations, statute/regulation
+citations, URLs, and quoted source text stay in their original English so the
+primary law remains verifiable.
 
 ## Architecture
 

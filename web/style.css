@@ -81,7 +81,7 @@ html, body {
 }
 .hist-item:hover { background: #fff; }
 .hist-item .ht-type { display: block; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
-.history:empty::after { content: "No research yet"; color: var(--muted); font-size: 12px; padding: 6px 10px; display: block; }
+.history:empty::after { content: attr(data-empty); color: var(--muted); font-size: 12px; padding: 6px 10px; display: block; }
 
 /* ── Main column ──────────────────────────────────────────────── */
 .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -96,6 +96,20 @@ html, body {
 .hamburger { display: none; background: none; border: none; font-size: 20px; cursor: pointer; color: var(--ink); }
 .topbar-title { display: inline-flex; align-items: baseline; font-weight: 700; font-size: 16px; }
 .topbar-tag { color: var(--muted); font-size: 13px; margin-left: auto; }
+.lang-select {
+  flex: 0 0 auto;
+  min-width: 126px;
+  height: 32px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  color: var(--ink);
+  padding: 0 9px;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.lang-select:focus { outline: none; border-color: var(--accent); background: #fff; }
 
 .chat { flex: 1; overflow-y: auto; padding: 26px 18px 8px; }
 .chat > * { max-width: var(--maxw); margin-left: auto; margin-right: auto; }
@@ -539,6 +553,8 @@ html, body {
   }
   .app.nav-open .sidebar { transform: translateX(0); }
   .hamburger { display: block; }
+  .topbar { gap: 10px; }
+  .topbar-tag { display: none; }
   .app.nav-open::after {
     content: ""; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 20;
   }

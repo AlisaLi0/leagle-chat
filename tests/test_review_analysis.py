@@ -37,6 +37,36 @@ class ReviewAnalysisTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(out["status"], "Quote not found")
         self.assertEqual(out["quote_accuracy"], "Not found")
 
+    def test_language_normalization_and_instruction(self):
+        from server.app import _language_instruction, _normalize_language
+
+        self.assertEqual(_normalize_language("es-MX"), "es")
+        self.assertEqual(_normalize_language("zh_CN"), "zh")
+        self.assertEqual(_normalize_language("zh-Hant"), "zh-TW")
+        self.assertEqual(_normalize_language("fr-CA"), "fr")
+        self.assertEqual(_normalize_language("pt-BR"), "pt")
+        self.assertEqual(_normalize_language("ko-KR"), "ko")
+        self.assertEqual(_normalize_language("ja-JP"), "ja")
+        self.assertEqual(_normalize_language("vi-VN"), "vi")
+        self.assertEqual(_normalize_language("de"), "en")
+        instruction = _language_instruction("zh-TW")
+        self.assertIn("Traditional Chinese", instruction)
+        self.assertIn("Keep US case names", instruction)
+        self.assertIn("original English", instruction)
+
+    async def test_support_check_reason_uses_selected_language(self):
+        from server.app import _brief_support_check
+
+        out = await _brief_support_check(
+            {"text": "384 U.S. 436", "proposition": "warnings are required"},
+            object(),
+            None,
+            [],
+            "zh",
+        )
+        self.assertEqual(out["status"], "Needs review")
+        self.assertIn("来源段落", out["reason"])
+
     async def test_case_analysis_uses_llm_json(self):
         import server.app as app
 

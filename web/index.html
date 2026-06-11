@@ -9,7 +9,7 @@
        serves this frontend and the /api/* routes from the same host, so all
        requests, cookies and the OAuth callback stay first-party. -->
   <meta name="leagle-api-base" content="" />
-  <link rel="stylesheet" href="style.css?v=20260611l" />
+  <link rel="stylesheet" href="style.css?v=20260611m" />
 </head>
 <body>
   <div class="app">
@@ -21,26 +21,26 @@
 
       <nav class="side-nav">
         <div class="nav-group">
-          <div class="nav-group-title">Legal Reasoning Engine</div>
+          <div class="nav-group-title" data-i18n="nav.engineGroup">Legal Reasoning Engine</div>
           <button class="nav-item active" data-action="new">
-            <span class="nav-ico">✦</span><span>Research Engine</span>
+            <span class="nav-ico">✦</span><span data-i18n="nav.researchEngine">Research Engine</span>
           </button>
         </div>
 
         <div class="nav-group">
-          <div class="nav-group-title">Legal Research Toolkit</div>
-          <button class="nav-item" data-tool="concept"><span class="nav-ico">◎</span><span>Search by Concept</span></button>
-          <button class="nav-item" data-tool="keyword"><span class="nav-ico">⌕</span><span>Search by Keyword</span></button>
-          <button class="nav-item" data-tool="case"><span class="nav-ico">§</span><span>Search by Case Name</span></button>
-          <button class="nav-item" data-tool="citation"><span class="nav-ico">❝</span><span>Search by Citation</span></button>
-          <button class="nav-item" data-tool="laws"><span class="nav-ico">¶</span><span>Laws &amp; Rules Search</span></button>
-          <button class="nav-item" data-tool="extractor"><span class="nav-ico">☷</span><span>Citation Extractor</span></button>
-          <button class="nav-item" data-tool="resolver"><span class="nav-ico">⌁</span><span>Case Resolver</span></button>
-          <button class="nav-item" data-tool="brief"><span class="nav-ico">▤</span><span>Brief Review</span></button>
+          <div class="nav-group-title" data-i18n="nav.toolkitGroup">Legal Research Toolkit</div>
+          <button class="nav-item" data-tool="concept"><span class="nav-ico">◎</span><span data-i18n="nav.concept">Search by Concept</span></button>
+          <button class="nav-item" data-tool="keyword"><span class="nav-ico">⌕</span><span data-i18n="nav.keyword">Search by Keyword</span></button>
+          <button class="nav-item" data-tool="case"><span class="nav-ico">§</span><span data-i18n="nav.case">Search by Case Name</span></button>
+          <button class="nav-item" data-tool="citation"><span class="nav-ico">❝</span><span data-i18n="nav.citation">Search by Citation</span></button>
+          <button class="nav-item" data-tool="laws"><span class="nav-ico">¶</span><span data-i18n="nav.laws">Laws &amp; Rules Search</span></button>
+          <button class="nav-item" data-tool="extractor"><span class="nav-ico">☷</span><span data-i18n="nav.extractor">Citation Extractor</span></button>
+          <button class="nav-item" data-tool="resolver"><span class="nav-ico">⌁</span><span data-i18n="nav.resolver">Case Resolver</span></button>
+          <button class="nav-item" data-tool="brief"><span class="nav-ico">▤</span><span data-i18n="nav.brief">Brief Review</span></button>
         </div>
 
         <div class="nav-group history-group">
-          <div class="nav-group-title">Research History</div>
+          <div class="nav-group-title" data-i18n="nav.history">Research History</div>
           <div class="history" id="history"></div>
         </div>
       </nav>
@@ -54,34 +54,45 @@
       <header class="topbar">
         <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
         <div class="topbar-title">JuriCodex Platform<span class="beta-badge">Beta</span></div>
-        <div class="topbar-tag">Find the law · reason through it · verify every step</div>
+        <div class="topbar-tag" data-i18n="topbar.tag">Find the law · reason through it · verify every step</div>
+        <select id="langSelect" class="lang-select" aria-label="Language">
+          <option value="en">English</option>
+          <option value="es">Español</option>
+          <option value="zh">中文</option>
+          <option value="zh-TW">繁體中文</option>
+          <option value="fr">Français</option>
+          <option value="pt">Português</option>
+          <option value="ko">한국어</option>
+          <option value="ja">日本語</option>
+          <option value="vi">Tiếng Việt</option>
+        </select>
       </header>
 
       <main id="chat" class="chat">
         <div class="intro">
-          <h1>Find the law. Reason through it. Verify every step.</h1>
-          <p>
+          <h1 data-i18n="intro.h1">Find the law. Reason through it. Verify every step.</h1>
+          <p data-i18n="intro.lead">
             JuriCodex Platform is a legal research workspace with two ways in:
             a Legal Reasoning Engine for working through questions, and a Legal Research
             Toolkit for searching, checking, and verifying primary law directly.
           </p>
           <div class="platform-split">
             <div class="platform-card">
-              <div class="platform-kicker">Legal Reasoning Engine</div>
-              <h2>When the work goes beyond search.</h2>
-              <p>Ask a question in plain English. JuriCodex clarifies when facts matter,
+              <div class="platform-kicker" data-i18n="intro.engineKicker">Legal Reasoning Engine</div>
+              <h2 data-i18n="intro.engineTitle">When the work goes beyond search.</h2>
+              <p data-i18n="intro.engineBody">Ask a question in plain English. JuriCodex clarifies when facts matter,
                 searches real authorities, refines the query when needed, and shows what
                 the answer depends on.</p>
             </div>
             <div class="platform-card">
-              <div class="platform-kicker">Legal Research Toolkit</div>
-              <h2>Search it. Cite it. Verify it.</h2>
-              <p>Start from a concept, keyword, case name, citation, or pasted brief.
+              <div class="platform-kicker" data-i18n="intro.toolkitKicker">Legal Research Toolkit</div>
+              <h2 data-i18n="intro.toolkitTitle">Search it. Cite it. Verify it.</h2>
+              <p data-i18n="intro.toolkitBody">Start from a concept, keyword, case name, citation, or pasted brief.
                 Find source-backed cases, statutes, regulations, quote checks, and
                 treatment-lite signals you can inspect.</p>
             </div>
           </div>
-          <p class="disclaimer">
+          <p class="disclaimer" data-i18n-html="intro.disclaimer">
             JuriCodex reasons from <strong>real primary sources</strong> you can open and
             verify. It is a <strong>research tool</strong> — verify the authorities before
             you rely on the analysis, and consult a licensed attorney for an actual decision.
@@ -107,10 +118,10 @@
     <div class="login-card" role="dialog" aria-modal="true" aria-label="Sign in to ask">
       <button class="login-close" id="loginClose" aria-label="Close">✕</button>
       <div class="login-logo">⚖</div>
-      <h2 class="login-title">Sign in to ask</h2>
-      <p class="login-sub">JuriCodex grounds every answer in real court opinions. Sign in to research and keep your work across devices.</p>
+      <h2 class="login-title" data-i18n="login.title">Sign in to ask</h2>
+      <p class="login-sub" data-i18n="login.sub">JuriCodex grounds every answer in real court opinions. Sign in to research and keep your work across devices.</p>
       <div class="login-body"><!-- provider buttons injected by app.js --></div>
-      <p class="login-fine">Free to use · We never post on your behalf.</p>
+      <p class="login-fine" data-i18n="login.fine">Free to use · We never post on your behalf.</p>
     </div>
   </div>
 
@@ -118,8 +129,8 @@
   <div class="login-overlay" id="upgradeModal" aria-hidden="true">
     <div class="login-card up-card" role="dialog" aria-modal="true" aria-label="Upgrade JuriCodex">
       <button class="login-close" id="upgradeClose" aria-label="Close">✕</button>
-      <h2 class="login-title">Choose a Platform workspace plan</h2>
-      <p class="login-sub">Source-backed research, verification, history, and export.</p>
+      <h2 class="login-title" data-i18n="upgrade.title">Choose a Platform workspace plan</h2>
+      <p class="login-sub" data-i18n="upgrade.sub">Source-backed research, verification, history, and export.</p>
       <div class="up-body"><!-- plan cards injected by app.js --></div>
     </div>
   </div>
@@ -137,6 +148,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260611n"></script>
+  <script src="app.js?v=20260611q"></script>
 </body>
 </html>
