@@ -441,8 +441,14 @@ html, body {
 .cycle-btn {
   border: 0; background: transparent; color: var(--muted); border-radius: 7px;
   padding: 7px 10px; font-size: 12.5px; font-weight: 700; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
 }
 .cycle-btn.active { background: var(--panel); color: var(--ink); box-shadow: 0 1px 4px rgba(20,22,34,.08); }
+.cycle-save {
+  color: var(--good); background: var(--good-soft); border: 1px solid #bce4cf;
+  border-radius: 999px; padding: 1px 8px; font-size: 10px; line-height: 1.35;
+  white-space: nowrap; font-weight: 800;
+}
 .up-plan {
   display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; width: 100%;
   background: var(--panel); border: 1px solid var(--line); border-radius: 11px;

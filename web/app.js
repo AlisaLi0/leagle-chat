@@ -817,11 +817,11 @@ function loadFreemius() {
 
 const PLAN_BLURB = {
   pro: {
-    name: 'Pro', monthly: '$9.98/mo', yearly: 'Yearly billing',
+    name: 'Pro', monthly: '$9.98/mo', yearly: '$99.80/yr',
     pitch: '300 source-backed research runs, verification, history, and export.',
   },
   max: {
-    name: 'Max', monthly: '$29.98/mo', yearly: 'Yearly billing',
+    name: 'Max', monthly: '$29.98/mo', yearly: '$299.80/yr',
     pitch: 'High-volume workspace for Brief Review, quote checks, export, and saved sessions.',
     featured: true,
   },
@@ -852,7 +852,7 @@ function openUpgradeModal(quota) {
   const cycle = billingCycle === 'annual' ? 'annual' : 'monthly';
   const cycleTabs = `<div class="billing-cycle" role="tablist" aria-label="Billing cycle">
       <button type="button" class="cycle-btn ${cycle === 'monthly' ? 'active' : ''}" data-cycle="monthly">Monthly</button>
-      <button type="button" class="cycle-btn ${cycle === 'annual' ? 'active' : ''}" data-cycle="annual">Yearly</button>
+      <button type="button" class="cycle-btn ${cycle === 'annual' ? 'active' : ''}" data-cycle="annual">Yearly <span class="cycle-save">Save 2 months</span></button>
     </div>`;
   const cards = Object.entries(billingCfg.plans || {}).map(([ourPlan, planId]) => {
     const b = PLAN_BLURB[ourPlan] || { name: ourPlan, price: '', pitch: '' };
