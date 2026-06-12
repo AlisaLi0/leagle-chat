@@ -546,18 +546,19 @@ html, body {
 .acc-meta { flex: 1; min-width: 0; }
 .acc-name { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .acc-plan { font-size: 11px; color: var(--muted); text-transform: capitalize; }
+.acc-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 8px; }
 .acc-logout {
-  flex: 0 0 auto; background: transparent; border: 1px solid var(--line);
-  color: var(--muted); border-radius: 8px; padding: 5px 8px;
-  font-size: 11.5px; font-weight: 700; cursor: pointer;
+  width: 100%; background: transparent; border: 1px solid var(--line);
+  color: var(--muted); border-radius: 9px; padding: 7px 10px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
 }
 .acc-logout:hover { border-color: var(--warn); color: var(--warn); }
 
 /* Settings gear (account row) + signed-out settings link */
 .acc-settings {
-  flex: 0 0 auto; background: transparent; border: 1px solid var(--line);
-  color: var(--muted); border-radius: 8px; width: 30px; height: 30px;
-  font-size: 15px; line-height: 1; cursor: pointer;
+  width: 100%; background: transparent; border: 1px solid var(--line);
+  color: var(--muted); border-radius: 9px; padding: 7px 10px;
+  font-size: 12px; font-weight: 700; line-height: 1.2; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
 }
 .acc-settings:hover { border-color: var(--accent); color: var(--accent-2); background: var(--accent-soft); }

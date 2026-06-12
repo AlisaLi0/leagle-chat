@@ -2795,11 +2795,15 @@ function renderAccount() {
           <div class="acc-name">${escapeHtml(me.name || me.email || tr('account.signedIn'))}</div>
           <div class="acc-plan">${escapeHtml(planName)} · ${usage}</div>
         </div>
-        <button class="acc-settings" id="settingsBtn" title="${escapeHtml(tr('account.settings'))}" aria-label="${escapeHtml(tr('account.settings'))}">⚙</button>
+      </div>
+      <div class="acc-actions">
+        <button class="acc-logout" id="logoutBtn" title="${escapeHtml(tr('account.signOutTitle'))}">${escapeHtml(tr('account.signOut'))}</button>
+        <button class="acc-settings" id="settingsBtn" title="${escapeHtml(tr('account.settings'))}" aria-label="${escapeHtml(tr('account.settings'))}">⚙ ${escapeHtml(tr('account.settings'))}</button>
       </div>
       ${emailWarn}
       ${upgrade}
       ${manage}`;
+    document.getElementById('logoutBtn').addEventListener('click', logout);
     document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
     document.getElementById('upgradeBtn')?.addEventListener('click', () => openUpgradeModal());
     document.getElementById('manageBillingBtn')?.addEventListener('click', openBillingPortal);
@@ -3166,7 +3170,6 @@ function renderSettings() {
     <section class="set-section">
       <div class="set-label">${escapeHtml(tr('settings.accountTitle'))}</div>
       <div class="set-actions">
-        <button class="set-btn" id="setLogoutBtn">${escapeHtml(tr('settings.signOut'))}</button>
         <button class="set-btn danger" id="setDeleteBtn">${escapeHtml(tr('settings.deleteAccount'))}</button>
       </div>
     </section>`;
@@ -3175,7 +3178,6 @@ function renderSettings() {
   document.getElementById('setVerifyBtn')?.addEventListener('click', confirmEmailVerify);
   document.getElementById('setCancelEmailBtn')?.addEventListener('click', () => { emailVerifyState = null; renderSettings(); });
   document.getElementById('setLang')?.addEventListener('change', (e) => { setLanguage(e.target.value); renderSettings(); });
-  document.getElementById('setLogoutBtn')?.addEventListener('click', async () => { await logout(); closeSettingsModal(); });
   document.getElementById('setDeleteBtn')?.addEventListener('click', requestAccountDeletion);
 }
 
