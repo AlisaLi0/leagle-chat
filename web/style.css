@@ -550,6 +550,52 @@ html, body {
 }
 .acc-logout:hover { border-color: var(--warn); color: var(--warn); }
 
+/* Settings gear (account row) + signed-out settings link */
+.acc-settings {
+  flex: 0 0 auto; background: transparent; border: 1px solid var(--line);
+  color: var(--muted); border-radius: 8px; width: 30px; height: 30px;
+  font-size: 15px; line-height: 1; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+}
+.acc-settings:hover { border-color: var(--accent); color: var(--accent-2); background: var(--accent-soft); }
+.acc-settings-link {
+  margin-top: 2px; width: 100%; background: transparent; border: 1px solid var(--line);
+  color: var(--muted); border-radius: 9px; padding: 7px 10px;
+  font-size: 12px; font-weight: 700; cursor: pointer;
+}
+.acc-settings-link:hover { border-color: var(--accent); color: var(--accent-2); background: var(--accent-soft); }
+
+/* ── Settings modal ───────────────────────────────────────────── */
+.settings-card { max-width: 440px; padding: 28px 26px 22px; text-align: left; }
+.settings-body { display: flex; flex-direction: column; gap: 18px; margin-top: 8px; }
+.set-section { display: flex; flex-direction: column; gap: 8px; }
+.set-section + .set-section { border-top: 1px solid var(--line); padding-top: 16px; }
+.set-label { font-size: 11px; font-weight: 800; letter-spacing: .5px; text-transform: uppercase; color: var(--muted); }
+.set-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.set-input {
+  flex: 1 1 160px; min-width: 0; padding: 9px 11px; font: inherit; font-size: 13px;
+  border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--ink);
+}
+.set-input:focus { outline: none; border-color: var(--accent); background: #fff; }
+select.set-input { width: 100%; flex-basis: 100%; cursor: pointer; }
+.set-btn {
+  flex: 0 0 auto; padding: 9px 14px; border-radius: 9px; font-size: 12.5px; font-weight: 700;
+  cursor: pointer; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+}
+.set-btn:hover { border-color: var(--accent); color: var(--accent-2); background: var(--accent-soft); }
+.set-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.set-btn.primary:hover { background: var(--accent-2); border-color: var(--accent-2); color: #fff; }
+.set-btn.danger { color: var(--warn); }
+.set-btn.danger:hover { border-color: var(--warn); color: var(--warn); background: var(--warn-soft, #fff6e6); }
+.set-email-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.set-email { font-size: 13.5px; font-weight: 600; color: var(--ink); word-break: break-all; }
+.set-email.muted { color: var(--muted); font-weight: 500; }
+.set-badge { font-size: 10.5px; font-weight: 800; padding: 2px 8px; border-radius: 999px; }
+.set-badge.ok { color: #1f7a4d; background: #e7f6ee; border: 1px solid #bfe6d0; }
+.set-help { margin: 0; font-size: 12px; line-height: 1.45; color: var(--muted); }
+.set-note { margin: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.set-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 /* ── Responsive: off-canvas sidebar ───────────────────────────── */
 @media (max-width: 860px) {
   .sidebar {

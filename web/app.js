@@ -1557,6 +1557,356 @@ const I18N = {
   },
 };
 
+// Settings dialog strings, kept in one block (merged into I18N below) so the
+// nine language tables stay readable. Any missing key falls back to English.
+const SETTINGS_I18N = {
+  en: {
+    'account.settings': 'Settings',
+    'settings.title': 'Settings',
+    'settings.profileTitle': 'Profile',
+    'settings.displayName': 'Display name',
+    'settings.save': 'Save',
+    'settings.emailTitle': 'Email',
+    'settings.emailNone': 'No email on file',
+    'settings.verified': 'Verified',
+    'settings.unverified': 'Not verified',
+    'settings.changeEmail': 'Change email',
+    'settings.addEmail': 'Add email',
+    'settings.emailHelp': 'Your email is used for billing and receipts. We send a code to confirm it.',
+    'settings.newEmail': 'New email address',
+    'settings.sendCode': 'Send code',
+    'settings.codeSentTo': 'We sent a 6-digit code to {email}. Enter it below.',
+    'settings.code': 'Verification code',
+    'settings.verify': 'Verify',
+    'settings.cancel': 'Cancel',
+    'settings.languageTitle': 'Language',
+    'settings.accountTitle': 'Account',
+    'settings.signOut': 'Sign out',
+    'settings.deleteAccount': 'Request account deletion',
+    'settings.signedOutNote': 'Sign in to manage your profile, email, and account.',
+    'settings.devCode': 'Email sending is off in this environment. Your code is {code}.',
+    'toast.nameSaved': 'Display name updated.',
+    'toast.nameFailed': 'Could not update your name. Please try again.',
+    'toast.codeSent': 'Verification code sent.',
+    'toast.codeSendFailed': 'Could not send the code. Try again or contact support@juricodex.online.',
+    'toast.emailVerified': 'Email verified.',
+    'toast.emailInvalid': 'Enter a valid email address.',
+    'toast.emailInUse': 'That email is already used by another account.',
+    'toast.codeBad': 'That code is incorrect.',
+    'toast.codeExpired': 'That code expired. Please request a new one.',
+    'toast.codeTooMany': 'Too many attempts. Please request a new code.',
+    'toast.tooSoon': 'Please wait a moment before requesting another code.',
+    'toast.sameEmail': 'That is already your email.',
+  },
+  es: {
+    'account.settings': 'Ajustes',
+    'settings.title': 'Ajustes',
+    'settings.profileTitle': 'Perfil',
+    'settings.displayName': 'Nombre visible',
+    'settings.save': 'Guardar',
+    'settings.emailTitle': 'Correo electrónico',
+    'settings.emailNone': 'Sin correo registrado',
+    'settings.verified': 'Verificado',
+    'settings.unverified': 'Sin verificar',
+    'settings.changeEmail': 'Cambiar correo',
+    'settings.addEmail': 'Añadir correo',
+    'settings.emailHelp': 'Tu correo se usa para facturación y recibos. Enviamos un código para confirmarlo.',
+    'settings.newEmail': 'Nuevo correo electrónico',
+    'settings.sendCode': 'Enviar código',
+    'settings.codeSentTo': 'Enviamos un código de 6 dígitos a {email}. Ingrésalo abajo.',
+    'settings.code': 'Código de verificación',
+    'settings.verify': 'Verificar',
+    'settings.cancel': 'Cancelar',
+    'settings.languageTitle': 'Idioma',
+    'settings.accountTitle': 'Cuenta',
+    'settings.signOut': 'Cerrar sesión',
+    'settings.deleteAccount': 'Solicitar eliminación de cuenta',
+    'settings.signedOutNote': 'Inicia sesión para gestionar tu perfil, correo y cuenta.',
+    'settings.devCode': 'El envío de correos está desactivado en este entorno. Tu código es {code}.',
+    'toast.nameSaved': 'Nombre actualizado.',
+    'toast.nameFailed': 'No se pudo actualizar tu nombre. Inténtalo de nuevo.',
+    'toast.codeSent': 'Código de verificación enviado.',
+    'toast.codeSendFailed': 'No se pudo enviar el código. Inténtalo de nuevo o escribe a support@juricodex.online.',
+    'toast.emailVerified': 'Correo verificado.',
+    'toast.emailInvalid': 'Introduce un correo válido.',
+    'toast.emailInUse': 'Ese correo ya lo usa otra cuenta.',
+    'toast.codeBad': 'El código es incorrecto.',
+    'toast.codeExpired': 'El código caducó. Solicita uno nuevo.',
+    'toast.codeTooMany': 'Demasiados intentos. Solicita un nuevo código.',
+    'toast.tooSoon': 'Espera un momento antes de pedir otro código.',
+    'toast.sameEmail': 'Ese ya es tu correo.',
+  },
+  zh: {
+    'account.settings': '设置',
+    'settings.title': '设置',
+    'settings.profileTitle': '个人资料',
+    'settings.displayName': '显示名称',
+    'settings.save': '保存',
+    'settings.emailTitle': '邮箱',
+    'settings.emailNone': '尚未绑定邮箱',
+    'settings.verified': '已验证',
+    'settings.unverified': '未验证',
+    'settings.changeEmail': '更改邮箱',
+    'settings.addEmail': '添加邮箱',
+    'settings.emailHelp': '邮箱用于计费和收据。我们会发送验证码以确认邮箱。',
+    'settings.newEmail': '新邮箱地址',
+    'settings.sendCode': '发送验证码',
+    'settings.codeSentTo': '我们已向 {email} 发送 6 位验证码，请在下方输入。',
+    'settings.code': '验证码',
+    'settings.verify': '验证',
+    'settings.cancel': '取消',
+    'settings.languageTitle': '语言',
+    'settings.accountTitle': '账户',
+    'settings.signOut': '退出登录',
+    'settings.deleteAccount': '请求删除账户',
+    'settings.signedOutNote': '登录后即可管理个人资料、邮箱和账户。',
+    'settings.devCode': '当前环境未开启邮件发送。你的验证码是 {code}。',
+    'toast.nameSaved': '显示名称已更新。',
+    'toast.nameFailed': '无法更新名称，请重试。',
+    'toast.codeSent': '验证码已发送。',
+    'toast.codeSendFailed': '验证码发送失败，请重试或联系 support@juricodex.online。',
+    'toast.emailVerified': '邮箱已验证。',
+    'toast.emailInvalid': '请输入有效的邮箱地址。',
+    'toast.emailInUse': '该邮箱已被其他账户使用。',
+    'toast.codeBad': '验证码不正确。',
+    'toast.codeExpired': '验证码已过期，请重新获取。',
+    'toast.codeTooMany': '尝试次数过多，请重新获取验证码。',
+    'toast.tooSoon': '请稍候再获取验证码。',
+    'toast.sameEmail': '这已经是你的邮箱了。',
+  },
+  'zh-TW': {
+    'account.settings': '設定',
+    'settings.title': '設定',
+    'settings.profileTitle': '個人資料',
+    'settings.displayName': '顯示名稱',
+    'settings.save': '儲存',
+    'settings.emailTitle': '電子郵件',
+    'settings.emailNone': '尚未綁定電子郵件',
+    'settings.verified': '已驗證',
+    'settings.unverified': '未驗證',
+    'settings.changeEmail': '更改電子郵件',
+    'settings.addEmail': '新增電子郵件',
+    'settings.emailHelp': '電子郵件用於帳單與收據。我們會寄送驗證碼以確認。',
+    'settings.newEmail': '新的電子郵件地址',
+    'settings.sendCode': '寄送驗證碼',
+    'settings.codeSentTo': '我們已向 {email} 寄送 6 位驗證碼，請在下方輸入。',
+    'settings.code': '驗證碼',
+    'settings.verify': '驗證',
+    'settings.cancel': '取消',
+    'settings.languageTitle': '語言',
+    'settings.accountTitle': '帳戶',
+    'settings.signOut': '登出',
+    'settings.deleteAccount': '請求刪除帳戶',
+    'settings.signedOutNote': '登入後即可管理個人資料、電子郵件與帳戶。',
+    'settings.devCode': '目前環境未開啟郵件寄送。你的驗證碼是 {code}。',
+    'toast.nameSaved': '顯示名稱已更新。',
+    'toast.nameFailed': '無法更新名稱，請重試。',
+    'toast.codeSent': '驗證碼已寄出。',
+    'toast.codeSendFailed': '驗證碼寄送失敗，請重試或聯絡 support@juricodex.online。',
+    'toast.emailVerified': '電子郵件已驗證。',
+    'toast.emailInvalid': '請輸入有效的電子郵件地址。',
+    'toast.emailInUse': '該電子郵件已被其他帳戶使用。',
+    'toast.codeBad': '驗證碼不正確。',
+    'toast.codeExpired': '驗證碼已過期，請重新取得。',
+    'toast.codeTooMany': '嘗試次數過多，請重新取得驗證碼。',
+    'toast.tooSoon': '請稍候再取得驗證碼。',
+    'toast.sameEmail': '這已經是你的電子郵件了。',
+  },
+  fr: {
+    'account.settings': 'Paramètres',
+    'settings.title': 'Paramètres',
+    'settings.profileTitle': 'Profil',
+    'settings.displayName': "Nom d'affichage",
+    'settings.save': 'Enregistrer',
+    'settings.emailTitle': 'E-mail',
+    'settings.emailNone': 'Aucun e-mail enregistré',
+    'settings.verified': 'Vérifié',
+    'settings.unverified': 'Non vérifié',
+    'settings.changeEmail': "Changer d'e-mail",
+    'settings.addEmail': 'Ajouter un e-mail',
+    'settings.emailHelp': "Votre e-mail sert à la facturation et aux reçus. Nous envoyons un code pour le confirmer.",
+    'settings.newEmail': 'Nouvelle adresse e-mail',
+    'settings.sendCode': 'Envoyer le code',
+    'settings.codeSentTo': 'Nous avons envoyé un code à 6 chiffres à {email}. Saisissez-le ci-dessous.',
+    'settings.code': 'Code de vérification',
+    'settings.verify': 'Vérifier',
+    'settings.cancel': 'Annuler',
+    'settings.languageTitle': 'Langue',
+    'settings.accountTitle': 'Compte',
+    'settings.signOut': 'Déconnexion',
+    'settings.deleteAccount': 'Demander la suppression du compte',
+    'settings.signedOutNote': 'Connectez-vous pour gérer votre profil, votre e-mail et votre compte.',
+    'settings.devCode': "L'envoi d'e-mails est désactivé dans cet environnement. Votre code est {code}.",
+    'toast.nameSaved': "Nom d'affichage mis à jour.",
+    'toast.nameFailed': "Impossible de mettre à jour votre nom. Réessayez.",
+    'toast.codeSent': 'Code de vérification envoyé.',
+    'toast.codeSendFailed': "Impossible d'envoyer le code. Réessayez ou écrivez à support@juricodex.online.",
+    'toast.emailVerified': 'E-mail vérifié.',
+    'toast.emailInvalid': 'Saisissez une adresse e-mail valide.',
+    'toast.emailInUse': 'Cet e-mail est déjà utilisé par un autre compte.',
+    'toast.codeBad': 'Ce code est incorrect.',
+    'toast.codeExpired': 'Ce code a expiré. Demandez-en un nouveau.',
+    'toast.codeTooMany': 'Trop de tentatives. Demandez un nouveau code.',
+    'toast.tooSoon': "Patientez un instant avant de redemander un code.",
+    'toast.sameEmail': "C'est déjà votre e-mail.",
+  },
+  pt: {
+    'account.settings': 'Configurações',
+    'settings.title': 'Configurações',
+    'settings.profileTitle': 'Perfil',
+    'settings.displayName': 'Nome de exibição',
+    'settings.save': 'Salvar',
+    'settings.emailTitle': 'E-mail',
+    'settings.emailNone': 'Nenhum e-mail registrado',
+    'settings.verified': 'Verificado',
+    'settings.unverified': 'Não verificado',
+    'settings.changeEmail': 'Alterar e-mail',
+    'settings.addEmail': 'Adicionar e-mail',
+    'settings.emailHelp': 'Seu e-mail é usado para cobrança e recibos. Enviamos um código para confirmá-lo.',
+    'settings.newEmail': 'Novo endereço de e-mail',
+    'settings.sendCode': 'Enviar código',
+    'settings.codeSentTo': 'Enviamos um código de 6 dígitos para {email}. Digite-o abaixo.',
+    'settings.code': 'Código de verificação',
+    'settings.verify': 'Verificar',
+    'settings.cancel': 'Cancelar',
+    'settings.languageTitle': 'Idioma',
+    'settings.accountTitle': 'Conta',
+    'settings.signOut': 'Sair',
+    'settings.deleteAccount': 'Solicitar exclusão da conta',
+    'settings.signedOutNote': 'Faça login para gerenciar seu perfil, e-mail e conta.',
+    'settings.devCode': 'O envio de e-mails está desativado neste ambiente. Seu código é {code}.',
+    'toast.nameSaved': 'Nome de exibição atualizado.',
+    'toast.nameFailed': 'Não foi possível atualizar seu nome. Tente novamente.',
+    'toast.codeSent': 'Código de verificação enviado.',
+    'toast.codeSendFailed': 'Não foi possível enviar o código. Tente novamente ou contate support@juricodex.online.',
+    'toast.emailVerified': 'E-mail verificado.',
+    'toast.emailInvalid': 'Digite um endereço de e-mail válido.',
+    'toast.emailInUse': 'Esse e-mail já é usado por outra conta.',
+    'toast.codeBad': 'Esse código está incorreto.',
+    'toast.codeExpired': 'Esse código expirou. Solicite um novo.',
+    'toast.codeTooMany': 'Muitas tentativas. Solicite um novo código.',
+    'toast.tooSoon': 'Aguarde um momento antes de solicitar outro código.',
+    'toast.sameEmail': 'Esse já é o seu e-mail.',
+  },
+  ko: {
+    'account.settings': '설정',
+    'settings.title': '설정',
+    'settings.profileTitle': '프로필',
+    'settings.displayName': '표시 이름',
+    'settings.save': '저장',
+    'settings.emailTitle': '이메일',
+    'settings.emailNone': '등록된 이메일 없음',
+    'settings.verified': '인증됨',
+    'settings.unverified': '미인증',
+    'settings.changeEmail': '이메일 변경',
+    'settings.addEmail': '이메일 추가',
+    'settings.emailHelp': '이메일은 결제 및 영수증에 사용됩니다. 확인을 위해 코드를 보냅니다.',
+    'settings.newEmail': '새 이메일 주소',
+    'settings.sendCode': '코드 보내기',
+    'settings.codeSentTo': '{email}(으)로 6자리 코드를 보냈습니다. 아래에 입력하세요.',
+    'settings.code': '인증 코드',
+    'settings.verify': '인증',
+    'settings.cancel': '취소',
+    'settings.languageTitle': '언어',
+    'settings.accountTitle': '계정',
+    'settings.signOut': '로그아웃',
+    'settings.deleteAccount': '계정 삭제 요청',
+    'settings.signedOutNote': '로그인하면 프로필, 이메일, 계정을 관리할 수 있습니다.',
+    'settings.devCode': '이 환경에서는 이메일 발송이 꺼져 있습니다. 코드는 {code}입니다.',
+    'toast.nameSaved': '표시 이름이 업데이트되었습니다.',
+    'toast.nameFailed': '이름을 업데이트할 수 없습니다. 다시 시도하세요.',
+    'toast.codeSent': '인증 코드를 보냈습니다.',
+    'toast.codeSendFailed': '코드를 보낼 수 없습니다. 다시 시도하거나 support@juricodex.online으로 문의하세요.',
+    'toast.emailVerified': '이메일이 인증되었습니다.',
+    'toast.emailInvalid': '유효한 이메일 주소를 입력하세요.',
+    'toast.emailInUse': '해당 이메일은 다른 계정에서 사용 중입니다.',
+    'toast.codeBad': '코드가 올바르지 않습니다.',
+    'toast.codeExpired': '코드가 만료되었습니다. 새로 요청하세요.',
+    'toast.codeTooMany': '시도가 너무 많습니다. 새 코드를 요청하세요.',
+    'toast.tooSoon': '잠시 후 다시 코드를 요청하세요.',
+    'toast.sameEmail': '이미 사용 중인 이메일입니다.',
+  },
+  ja: {
+    'account.settings': '設定',
+    'settings.title': '設定',
+    'settings.profileTitle': 'プロフィール',
+    'settings.displayName': '表示名',
+    'settings.save': '保存',
+    'settings.emailTitle': 'メール',
+    'settings.emailNone': '登録済みのメールはありません',
+    'settings.verified': '確認済み',
+    'settings.unverified': '未確認',
+    'settings.changeEmail': 'メールを変更',
+    'settings.addEmail': 'メールを追加',
+    'settings.emailHelp': 'メールは請求と領収書に使用されます。確認のためコードを送信します。',
+    'settings.newEmail': '新しいメールアドレス',
+    'settings.sendCode': 'コードを送信',
+    'settings.codeSentTo': '{email} に6桁のコードを送信しました。下に入力してください。',
+    'settings.code': '確認コード',
+    'settings.verify': '確認',
+    'settings.cancel': 'キャンセル',
+    'settings.languageTitle': '言語',
+    'settings.accountTitle': 'アカウント',
+    'settings.signOut': 'ログアウト',
+    'settings.deleteAccount': 'アカウント削除をリクエスト',
+    'settings.signedOutNote': 'ログインすると、プロフィール・メール・アカウントを管理できます。',
+    'settings.devCode': 'この環境ではメール送信が無効です。コードは {code} です。',
+    'toast.nameSaved': '表示名を更新しました。',
+    'toast.nameFailed': '名前を更新できませんでした。もう一度お試しください。',
+    'toast.codeSent': '確認コードを送信しました。',
+    'toast.codeSendFailed': 'コードを送信できませんでした。再試行するか support@juricodex.online までご連絡ください。',
+    'toast.emailVerified': 'メールを確認しました。',
+    'toast.emailInvalid': '有効なメールアドレスを入力してください。',
+    'toast.emailInUse': 'そのメールは別のアカウントで使用されています。',
+    'toast.codeBad': 'コードが正しくありません。',
+    'toast.codeExpired': 'コードの有効期限が切れました。新しいコードをリクエストしてください。',
+    'toast.codeTooMany': '試行回数が多すぎます。新しいコードをリクエストしてください。',
+    'toast.tooSoon': 'しばらくしてからもう一度コードをリクエストしてください。',
+    'toast.sameEmail': 'それはすでにあなたのメールです。',
+  },
+  vi: {
+    'account.settings': 'Cài đặt',
+    'settings.title': 'Cài đặt',
+    'settings.profileTitle': 'Hồ sơ',
+    'settings.displayName': 'Tên hiển thị',
+    'settings.save': 'Lưu',
+    'settings.emailTitle': 'Email',
+    'settings.emailNone': 'Chưa có email',
+    'settings.verified': 'Đã xác minh',
+    'settings.unverified': 'Chưa xác minh',
+    'settings.changeEmail': 'Đổi email',
+    'settings.addEmail': 'Thêm email',
+    'settings.emailHelp': 'Email của bạn dùng cho thanh toán và biên nhận. Chúng tôi gửi mã để xác nhận.',
+    'settings.newEmail': 'Địa chỉ email mới',
+    'settings.sendCode': 'Gửi mã',
+    'settings.codeSentTo': 'Chúng tôi đã gửi mã 6 chữ số đến {email}. Nhập mã bên dưới.',
+    'settings.code': 'Mã xác minh',
+    'settings.verify': 'Xác minh',
+    'settings.cancel': 'Hủy',
+    'settings.languageTitle': 'Ngôn ngữ',
+    'settings.accountTitle': 'Tài khoản',
+    'settings.signOut': 'Đăng xuất',
+    'settings.deleteAccount': 'Yêu cầu xóa tài khoản',
+    'settings.signedOutNote': 'Đăng nhập để quản lý hồ sơ, email và tài khoản của bạn.',
+    'settings.devCode': 'Việc gửi email đang tắt trong môi trường này. Mã của bạn là {code}.',
+    'toast.nameSaved': 'Đã cập nhật tên hiển thị.',
+    'toast.nameFailed': 'Không thể cập nhật tên. Vui lòng thử lại.',
+    'toast.codeSent': 'Đã gửi mã xác minh.',
+    'toast.codeSendFailed': 'Không thể gửi mã. Thử lại hoặc liên hệ support@juricodex.online.',
+    'toast.emailVerified': 'Đã xác minh email.',
+    'toast.emailInvalid': 'Nhập địa chỉ email hợp lệ.',
+    'toast.emailInUse': 'Email đó đã được tài khoản khác sử dụng.',
+    'toast.codeBad': 'Mã không đúng.',
+    'toast.codeExpired': 'Mã đã hết hạn. Vui lòng yêu cầu mã mới.',
+    'toast.codeTooMany': 'Quá nhiều lần thử. Vui lòng yêu cầu mã mới.',
+    'toast.tooSoon': 'Vui lòng đợi một lát trước khi yêu cầu mã khác.',
+    'toast.sameEmail': 'Đó đã là email của bạn.',
+  },
+};
+for (const [lang, keys] of Object.entries(SETTINGS_I18N)) {
+  I18N[lang] = Object.assign(I18N[lang] || {}, keys);
+}
+
 function detectLanguage() {
   try {
     const saved = localStorage.getItem(LANG_STORAGE_KEY);
@@ -2418,7 +2768,6 @@ function renderAccount() {
       ? `<button class="acc-upgrade" id="upgradeBtn">${escapeHtml(tr('account.upgrade'))}</button>` : '';
     const manage = (billingCfg && planName !== 'free')
       ? `<button class="acc-manage" id="manageBillingBtn">${escapeHtml(tr('account.manage'))}</button>` : '';
-    const deleteReq = `<button class="acc-delete" id="deleteAccountBtn">${escapeHtml(tr('account.deleteRequest'))}</button>`;
     const emailWarn = !hasBillingEmail()
       ? `<div class="acc-email-warn">${escapeHtml(tr('account.emailWarn'))}</div>`
       : '';
@@ -2429,16 +2778,14 @@ function renderAccount() {
           <div class="acc-name">${escapeHtml(me.name || me.email || tr('account.signedIn'))}</div>
           <div class="acc-plan">${escapeHtml(planName)} · ${usage}</div>
         </div>
-        <button class="acc-logout" id="logoutBtn" title="${escapeHtml(tr('account.signOutTitle'))}">${escapeHtml(tr('account.signOut'))}</button>
+        <button class="acc-settings" id="settingsBtn" title="${escapeHtml(tr('account.settings'))}" aria-label="${escapeHtml(tr('account.settings'))}">⚙</button>
       </div>
       ${emailWarn}
       ${upgrade}
-      ${manage}
-      ${deleteReq}`;
-    document.getElementById('logoutBtn').addEventListener('click', logout);
+      ${manage}`;
+    document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
     document.getElementById('upgradeBtn')?.addEventListener('click', () => openUpgradeModal());
     document.getElementById('manageBillingBtn')?.addEventListener('click', openBillingPortal);
-    document.getElementById('deleteAccountBtn')?.addEventListener('click', requestAccountDeletion);
   } else if (providers.length) {
     const btns = providers.map((p) =>
       `<button class="acc-signin" data-provider="${p}">
@@ -2449,11 +2796,13 @@ function renderAccount() {
       <div class="acc-signin-wrap">
         <div class="acc-hint">${escapeHtml(tr('account.hint'))}</div>
         ${btns}
+        <button class="acc-settings-link" id="settingsBtn">⚙ ${escapeHtml(tr('account.settings'))}</button>
       </div>`;
     accountEl.querySelectorAll('.acc-signin').forEach((b) =>
       b.addEventListener('click', () => {
         location.href = `${API_BASE}/api/auth/${b.dataset.provider}/start?next=${selfNext()}`;
       }));
+    document.getElementById('settingsBtn')?.addEventListener('click', openSettingsModal);
   } else {
     accountEl.innerHTML = '';
   }
@@ -2726,6 +3075,168 @@ async function requestAccountDeletion() {
     showToast(tr('toast.deleteFailed'), 7000);
   }
 }
+
+// ── Settings dialog (profile · email verification · language · account) ──────
+const settingsModal = document.getElementById('settingsModal');
+const SETTINGS_EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+let emailVerifyState = null;   // { email } while awaiting a code, else null
+
+function openSettingsModal() {
+  if (!settingsModal) return;
+  emailVerifyState = null;
+  renderSettings();
+  settingsModal.classList.add('open');
+  settingsModal.setAttribute('aria-hidden', 'false');
+}
+
+function closeSettingsModal() {
+  if (!settingsModal) return;
+  settingsModal.classList.remove('open');
+  settingsModal.setAttribute('aria-hidden', 'true');
+  emailVerifyState = null;
+}
+
+function langOptionsHtml() {
+  return Object.keys(LANGS).map((code) =>
+    `<option value="${code}"${code === currentLang ? ' selected' : ''}>${escapeHtml(LANGS[code].label)}</option>`).join('');
+}
+
+function renderSettings() {
+  const body = settingsModal && settingsModal.querySelector('.settings-body');
+  if (!body) return;
+  const langSection = `
+    <section class="set-section">
+      <div class="set-label">${escapeHtml(tr('settings.languageTitle'))}</div>
+      <select id="setLang" class="set-input">${langOptionsHtml()}</select>
+    </section>`;
+  if (!me) {
+    body.innerHTML = `<p class="set-note">${escapeHtml(tr('settings.signedOutNote'))}</p>${langSection}`;
+    body.querySelector('#setLang')?.addEventListener('change', (e) => { setLanguage(e.target.value); renderSettings(); });
+    return;
+  }
+  const email = (me.email || '').trim();
+  const hasEmail = !!email && !/@users\.juricodex\.online$/i.test(email);
+  const emailLine = hasEmail
+    ? `<div class="set-email-row"><span class="set-email">${escapeHtml(email)}</span><span class="set-badge ok">${escapeHtml(tr('settings.verified'))}</span></div>`
+    : `<div class="set-email-row"><span class="set-email muted">${escapeHtml(tr('settings.emailNone'))}</span></div>`;
+  const verifying = !!(emailVerifyState && emailVerifyState.email);
+  const emailForm = verifying
+    ? `<p class="set-help">${escapeHtml(tr('settings.codeSentTo', { email: emailVerifyState.email }))}</p>
+       <div class="set-row">
+         <input id="setCode" class="set-input" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="${escapeHtml(tr('settings.code'))}" />
+         <button class="set-btn primary" id="setVerifyBtn">${escapeHtml(tr('settings.verify'))}</button>
+         <button class="set-btn" id="setCancelEmailBtn">${escapeHtml(tr('settings.cancel'))}</button>
+       </div>`
+    : `<p class="set-help">${escapeHtml(tr('settings.emailHelp'))}</p>
+       <div class="set-row">
+         <input id="setEmail" class="set-input" type="email" autocomplete="email" placeholder="${escapeHtml(tr('settings.newEmail'))}" />
+         <button class="set-btn primary" id="setSendCodeBtn">${escapeHtml(hasEmail ? tr('settings.changeEmail') : tr('settings.addEmail'))}</button>
+       </div>`;
+  body.innerHTML = `
+    <section class="set-section">
+      <div class="set-label">${escapeHtml(tr('settings.profileTitle'))}</div>
+      <div class="set-row">
+        <input id="setName" class="set-input" type="text" maxlength="80" value="${escapeHtml(me.name || '')}" placeholder="${escapeHtml(tr('settings.displayName'))}" />
+        <button class="set-btn primary" id="setNameBtn">${escapeHtml(tr('settings.save'))}</button>
+      </div>
+    </section>
+    <section class="set-section">
+      <div class="set-label">${escapeHtml(tr('settings.emailTitle'))}</div>
+      ${emailLine}
+      ${emailForm}
+    </section>
+    ${langSection}
+    <section class="set-section">
+      <div class="set-label">${escapeHtml(tr('settings.accountTitle'))}</div>
+      <div class="set-actions">
+        <button class="set-btn" id="setLogoutBtn">${escapeHtml(tr('settings.signOut'))}</button>
+        <button class="set-btn danger" id="setDeleteBtn">${escapeHtml(tr('settings.deleteAccount'))}</button>
+      </div>
+    </section>`;
+  document.getElementById('setNameBtn')?.addEventListener('click', saveDisplayName);
+  document.getElementById('setSendCodeBtn')?.addEventListener('click', startEmailVerify);
+  document.getElementById('setVerifyBtn')?.addEventListener('click', confirmEmailVerify);
+  document.getElementById('setCancelEmailBtn')?.addEventListener('click', () => { emailVerifyState = null; renderSettings(); });
+  document.getElementById('setLang')?.addEventListener('change', (e) => { setLanguage(e.target.value); renderSettings(); });
+  document.getElementById('setLogoutBtn')?.addEventListener('click', async () => { await logout(); closeSettingsModal(); });
+  document.getElementById('setDeleteBtn')?.addEventListener('click', requestAccountDeletion);
+}
+
+async function saveDisplayName() {
+  const name = (document.getElementById('setName')?.value || '').trim();
+  if (!name) return;
+  try {
+    const r = await api('/api/account/profile', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (r.status === 401) { me = null; renderAccount(); closeSettingsModal(); openLoginModal(); return; }
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json().catch(() => ({}));
+    if (data.user) me = data.user;
+    renderAccount();
+    showToast(tr('toast.nameSaved'));
+  } catch {
+    showToast(tr('toast.nameFailed'));
+  }
+}
+
+async function startEmailVerify() {
+  const email = (document.getElementById('setEmail')?.value || '').trim().toLowerCase();
+  if (!SETTINGS_EMAIL_RE.test(email)) { showToast(tr('toast.emailInvalid')); return; }
+  try {
+    const r = await api('/api/account/email/start', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, lang: currentLang }),
+    });
+    if (r.status === 401) { me = null; renderAccount(); closeSettingsModal(); openLoginModal(); return; }
+    if (r.status === 409) { showToast(tr('toast.emailInUse')); return; }
+    if (r.status === 429) { showToast(tr('toast.tooSoon')); return; }
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      showToast(tr(d.error === 'same_email' ? 'toast.sameEmail' : 'toast.emailInvalid'));
+      return;
+    }
+    const data = await r.json().catch(() => ({}));
+    emailVerifyState = { email };
+    renderSettings();
+    if (data.dev_code) showToast(tr('settings.devCode', { code: data.dev_code }), 9000);
+    else showToast(tr('toast.codeSent'));
+  } catch {
+    showToast(tr('toast.codeSendFailed'), 6000);
+  }
+}
+
+async function confirmEmailVerify() {
+  if (!emailVerifyState) return;
+  const code = (document.getElementById('setCode')?.value || '').trim();
+  if (!code) return;
+  try {
+    const r = await api('/api/account/email/verify', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: emailVerifyState.email, code }),
+    });
+    if (r.status === 401) { me = null; renderAccount(); closeSettingsModal(); openLoginModal(); return; }
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      const map = { in_use: 'toast.emailInUse', bad_code: 'toast.codeBad', expired: 'toast.codeExpired', too_many: 'toast.codeTooMany', no_code: 'toast.codeExpired' };
+      showToast(tr(map[d.error] || 'toast.codeBad'));
+      return;
+    }
+    const data = await r.json().catch(() => ({}));
+    if (data.user) me = data.user;
+    emailVerifyState = null;
+    renderAccount();
+    renderSettings();
+    showToast(tr('toast.emailVerified'));
+  } catch {
+    showToast(tr('toast.codeBad'));
+  }
+}
+
+document.getElementById('settingsClose')?.addEventListener('click', closeSettingsModal);
+settingsModal?.addEventListener('click', (e) => { if (e.target === settingsModal) closeSettingsModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSettingsModal(); });
 
 // Local (signed-out) history helpers.
 function loadLocal() { try { return JSON.parse(localStorage.getItem(HKEY)) || []; } catch { return []; } }

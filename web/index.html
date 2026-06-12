@@ -9,7 +9,7 @@
        serves this frontend and the /api/* routes from the same host, so all
        requests, cookies and the OAuth callback stay first-party. -->
   <meta name="leagle-api-base" content="" />
-  <link rel="stylesheet" href="style.css?v=20260611m" />
+  <link rel="stylesheet" href="style.css?v=20260611t" />
 </head>
 <body>
   <div class="app">
@@ -135,6 +135,15 @@
     </div>
   </div>
 
+  <!-- Account settings dialog: opened from the gear in the sidebar account block. -->
+  <div class="login-overlay" id="settingsModal" aria-hidden="true">
+    <div class="login-card settings-card" role="dialog" aria-modal="true" aria-label="Settings">
+      <button class="login-close" id="settingsClose" aria-label="Close">✕</button>
+      <h2 class="login-title" data-i18n="settings.title">Settings</h2>
+      <div class="settings-body"><!-- rendered by app.js --></div>
+    </div>
+  </div>
+
   <!-- Cookie consent: shown until the visitor accepts or declines. -->
   <div class="cookie-banner" id="cookieBanner" role="dialog" aria-live="polite" aria-label="Cookie notice">
     <div class="cookie-text">
@@ -148,6 +157,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260611s"></script>
+  <script src="app.js?v=20260611t"></script>
 </body>
 </html>

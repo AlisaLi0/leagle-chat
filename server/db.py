@@ -16,6 +16,7 @@ keeps the dependency footprint at zero beyond the standard library.
 """
 from __future__ import annotations
 
+import hmac
 import json
 import os
 import sqlite3
@@ -131,6 +132,18 @@ CREATE TABLE IF NOT EXISTS account_deletion_requests (
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_delete_requests_user ON account_deletion_requests(user_id, status, created_at DESC);
+CREATE TABLE IF NOT EXISTS email_verifications (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL,
+    email       TEXT NOT NULL,
+    code        TEXT NOT NULL,
+    attempts    INTEGER NOT NULL DEFAULT 0,
+    expires_at  INTEGER NOT NULL,
+    created_at  TEXT NOT NULL,
+    consumed_at TEXT,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id, consumed_at, id DESC);
 """
 
 
@@ -700,6 +713,155 @@ def request_account_deletion(user_id: int, email: str) -> int:
         )
         conn.commit()
         return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+# ── Profile (display name) ───────────────────────────────────────────────────
+
+def set_user_name(user_id: int, name: str) -> "User | None":
+    """Update the account's display name (overrides the OAuth-provided name)."""
+    clean = (name or "").strip()[:80]
+    conn = _connect()
+    try:
+        conn.execute(
+            "UPDATE users SET name=? WHERE id=?", (clean, user_id),
+        )
+        conn.commit()
+        r = conn.execute("SELECT * FROM users WHERE id=?", (user_id,)).fetchone()
+        return _row_to_user(r) if r else None
+    finally:
+        conn.close()
+
+
+# ── Email verification (self-service add/change email) ───────────────────────
+
+def email_in_use_by_other(email: str, user_id: int) -> bool:
+    """True if a different account already owns this (verified) email — used to
+    block one user from claiming another account's email via self-service."""
+    clean = (email or "").strip().lower()
+    if not clean:
+        return False
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT id FROM users WHERE lower(email)=lower(?) AND id<>? LIMIT 1",
+            (clean, user_id),
+        ).fetchone()
+        return row is not None
+    finally:
+        conn.close()
+
+
+def latest_email_verification(user_id: int, email: str) -> dict | None:
+    """The most recent unconsumed verification row for this user+email, or None."""
+    clean = (email or "").strip().lower()
+    conn = _connect()
+    try:
+        r = conn.execute(
+            "SELECT id, code, attempts, expires_at, created_at FROM email_verifications "
+            "WHERE user_id=? AND lower(email)=lower(?) AND consumed_at IS NULL "
+            "ORDER BY id DESC LIMIT 1",
+            (user_id, clean),
+        ).fetchone()
+        return dict(r) if r else None
+    finally:
+        conn.close()
+
+
+def create_email_verification(user_id: int, email: str, code: str,
+                              ttl_seconds: int = 900) -> int:
+    """Store a fresh verification code, invalidating older codes for this user."""
+    clean = (email or "").strip().lower()
+    now = _now()
+    expires_at = int(time.time()) + int(ttl_seconds)
+    conn = _connect()
+    try:
+        # Drop any previous unconsumed codes for this user so only one is live.
+        conn.execute(
+            "UPDATE email_verifications SET consumed_at=? "
+            "WHERE user_id=? AND consumed_at IS NULL",
+            (now, user_id),
+        )
+        cur = conn.execute(
+            "INSERT INTO email_verifications (user_id, email, code, attempts, expires_at, created_at) "
+            "VALUES (?, ?, ?, 0, ?, ?)",
+            (user_id, clean, code, expires_at, now),
+        )
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+def verify_email_code(user_id: int, email: str, code: str,
+                      max_attempts: int = 6) -> str:
+    """Validate a code and, on success, set users.email to the verified address.
+
+    Returns one of: 'ok', 'bad_code', 'expired', 'too_many', 'in_use', 'no_code'.
+    """
+    clean = (email or "").strip().lower()
+    supplied = (code or "").strip()
+    now_ts = int(time.time())
+    now = _now()
+    conn = _connect()
+    try:
+        conn.isolation_level = None
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            row = conn.execute(
+                "SELECT id, code, attempts, expires_at FROM email_verifications "
+                "WHERE user_id=? AND lower(email)=lower(?) AND consumed_at IS NULL "
+                "ORDER BY id DESC LIMIT 1",
+                (user_id, clean),
+            ).fetchone()
+            if not row:
+                conn.execute("COMMIT")
+                return "no_code"
+            if int(row["attempts"]) >= max_attempts:
+                conn.execute("UPDATE email_verifications SET consumed_at=? WHERE id=?", (now, row["id"]))
+                conn.execute("COMMIT")
+                return "too_many"
+            if int(row["expires_at"]) < now_ts:
+                conn.execute("UPDATE email_verifications SET consumed_at=? WHERE id=?", (now, row["id"]))
+                conn.execute("COMMIT")
+                return "expired"
+            if not hmac.compare_digest(str(row["code"]), supplied):
+                conn.execute(
+                    "UPDATE email_verifications SET attempts=attempts+1 WHERE id=?",
+                    (row["id"],),
+                )
+                conn.execute("COMMIT")
+                return "bad_code"
+            # Re-check the email isn't taken by another account inside the txn.
+            other = conn.execute(
+                "SELECT id FROM users WHERE lower(email)=lower(?) AND id<>? LIMIT 1",
+                (clean, user_id),
+            ).fetchone()
+            if other:
+                conn.execute("COMMIT")
+                return "in_use"
+            conn.execute("UPDATE email_verifications SET consumed_at=? WHERE id=?", (now, row["id"]))
+            conn.execute("UPDATE users SET email=? WHERE id=?", (clean, user_id))
+            # Keep the signing-in identity's email aligned so future logins merge
+            # cleanly rather than re-splitting the account.
+            user = conn.execute(
+                "SELECT provider, provider_user_id FROM users WHERE id=?", (user_id,)
+            ).fetchone()
+            if user and user["provider"] and user["provider_user_id"]:
+                conn.execute(
+                    "UPDATE oauth_identities SET email=?, updated_at=? "
+                    "WHERE provider=? AND provider_user_id=?",
+                    (clean, now, user["provider"], user["provider_user_id"]),
+                )
+            conn.execute("COMMIT")
+            return "ok"
+        except Exception:
+            try:
+                conn.execute("ROLLBACK")
+            except sqlite3.Error:
+                pass
+            raise
     finally:
         conn.close()
 

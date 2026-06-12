@@ -39,6 +39,7 @@ from .courtlistener import CourtListener
 from .statutes import ECFR, USCode
 from . import llm
 from . import db, auth, billing
+from . import email_send
 
 HOST = os.getenv("LEAGLE_HOST", "127.0.0.1")
 PORT = int(os.getenv("LEAGLE_PORT", "8600"))
@@ -1653,6 +1654,108 @@ def account_delete_request(request: Request):
         return JSONResponse(status_code=403, content={"error": "bad_csrf"})
     request_id = db.request_account_deletion(user.id, user.email)
     return {"ok": True, "request_id": request_id}
+
+
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+# Don't re-send a code more than once per minute to the same address (anti-spam
+# + protects our Aliyun sending quota).
+EMAIL_VERIFY_RESEND_SECONDS = 60
+
+
+def _account_guard(request: Request):
+    """Shared auth + same-origin + CSRF check for account-mutating endpoints.
+
+    Returns the signed-in User on success, or a JSONResponse to return as-is.
+    """
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    if not _same_origin_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_origin"})
+    if not _csrf_valid_request(request):
+        return JSONResponse(status_code=403, content={"error": "bad_csrf"})
+    return user
+
+
+@app.post("/api/account/profile")
+async def account_profile(request: Request):
+    """Update the signed-in account's display name."""
+    user = _account_guard(request)
+    if isinstance(user, JSONResponse):
+        return user
+    try:
+        body = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse(status_code=400, content={"error": "invalid_json"})
+    name = str((body or {}).get("name") or "").strip()
+    if not name or len(name) > 80:
+        return JSONResponse(status_code=400, content={"error": "invalid_name"})
+    updated = db.set_user_name(user.id, name)
+    return {"ok": True, "user": updated.to_public() if updated else None}
+
+
+@app.post("/api/account/email/start")
+async def account_email_start(request: Request):
+    """Begin verifying a new/added email: mail a short code to the address."""
+    user = _account_guard(request)
+    if isinstance(user, JSONResponse):
+        return user
+    try:
+        body = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse(status_code=400, content={"error": "invalid_json"})
+    body = body or {}
+    email = str(body.get("email") or "").strip().lower()
+    lang = str(body.get("lang") or "en")
+    if not _EMAIL_RE.match(email) or len(email) > 254:
+        return JSONResponse(status_code=400, content={"error": "invalid_email"})
+    if email == (user.email or "").strip().lower():
+        return JSONResponse(status_code=400, content={"error": "same_email"})
+    if db.email_in_use_by_other(email, user.id):
+        return JSONResponse(status_code=409, content={"error": "email_in_use"})
+    # Throttle resends: reuse the live code if one was just sent.
+    existing = db.latest_email_verification(user.id, email)
+    now_ts = int(time.time())
+    if existing and existing.get("expires_at", 0) > now_ts:
+        created = existing.get("created_at") or ""
+        try:
+            created_ts = time.mktime(time.strptime(created, "%Y-%m-%dT%H:%M:%SZ")) - time.timezone
+        except (ValueError, OverflowError):
+            created_ts = 0
+        if created_ts and (now_ts - created_ts) < EMAIL_VERIFY_RESEND_SECONDS:
+            return JSONResponse(status_code=429, content={"error": "too_soon"})
+    code = email_send.gen_code()
+    db.create_email_verification(user.id, email, code)
+    sent = email_send.send_verification(email, code, lang)
+    out: dict = {"ok": True, "sent": sent}
+    # If SMTP isn't configured (dev only), surface the code so the flow is
+    # testable. Never leak codes once real sending is configured.
+    if not sent and not email_send.enabled():
+        out["dev_code"] = code
+    return out
+
+
+@app.post("/api/account/email/verify")
+async def account_email_verify(request: Request):
+    """Confirm the emailed code and set it as the account email."""
+    user = _account_guard(request)
+    if isinstance(user, JSONResponse):
+        return user
+    try:
+        body = await request.json()
+    except (ValueError, UnicodeDecodeError):
+        return JSONResponse(status_code=400, content={"error": "invalid_json"})
+    body = body or {}
+    email = str(body.get("email") or "").strip().lower()
+    code = str(body.get("code") or "").strip()
+    if not _EMAIL_RE.match(email) or not code:
+        return JSONResponse(status_code=400, content={"error": "invalid_request"})
+    result = db.verify_email_code(user.id, email, code)
+    if result == "ok":
+        updated = db.get_user(user.id)
+        return {"ok": True, "user": updated.to_public() if updated else None}
+    status = 409 if result == "in_use" else 400
+    return JSONResponse(status_code=status, content={"error": result})
 
 
 # Static frontend (mounted last so /api/* takes precedence).
