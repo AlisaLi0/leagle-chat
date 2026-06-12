@@ -59,8 +59,9 @@ const I18N = {
     'intro.toolkitBody': 'Start from a concept, keyword, case name, citation, statute, regulation, or pasted brief. Open the source, inspect the citation, and verify quoted language before relying on it.',
     'intro.disclaimer': 'JuriCodex helps you find and understand <strong>real legal authorities</strong> you can open and verify. It is a <strong>research tool</strong>, not legal advice; verify the sources before relying on them and consult a licensed attorney for decisions.',
     'example.0': 'Can my landlord keep my security deposit for normal wear and tear?',
-    'example.1': 'What did Miranda v. Arizona actually hold?',
-    'example.2': 'Fourth Amendment limits on warrantless car searches',
+    'example.1': 'Can I be fired after reporting workplace safety violations?',
+    'example.2': 'What did Miranda v. Arizona actually hold?',
+    'example.3': 'Fourth Amendment limits on warrantless car searches',
     'placeholder.default': DEFAULT_PLACEHOLDER,
     'placeholder.concept': 'Describe the legal concept or situation in plain English…',
     'placeholder.keyword': 'Enter keywords to search case law…',
@@ -228,8 +229,9 @@ const I18N = {
     'intro.toolkitBody': 'Empieza con un concepto, palabra clave, nombre de caso, cita, estatuto, regulación o escrito pegado. Abre la fuente, revisa la cita y verifica el texto citado antes de apoyarte en él.',
     'intro.disclaimer': 'JuriCodex te ayuda a encontrar y entender <strong>autoridades jurídicas reales</strong> que puedes abrir y verificar. Es una <strong>herramienta de investigación</strong>, no asesoría legal; verifica las fuentes antes de apoyarte en ellas y consulta a un abogado autorizado para decisiones.',
     'example.0': '¿Puede mi arrendador quedarse con mi depósito por desgaste normal?',
-    'example.1': '¿Qué sostuvo realmente Miranda v. Arizona?',
-    'example.2': 'Límites de la Cuarta Enmienda en registros de autos sin orden judicial',
+    'example.1': '¿Pueden despedirme después de denunciar riesgos de seguridad en el trabajo?',
+    'example.2': '¿Qué sostuvo realmente Miranda v. Arizona?',
+    'example.3': 'Límites de la Cuarta Enmienda en registros de autos sin orden judicial',
     'placeholder.default': 'Pregunta en lenguaje claro…  (p. ej., despido por reportar violaciones de seguridad)',
     'placeholder.concept': 'Describe el concepto legal o la situación en lenguaje claro…',
     'placeholder.keyword': 'Ingresa palabras clave para buscar jurisprudencia…',
@@ -397,8 +399,9 @@ const I18N = {
     'intro.toolkitBody': '从概念、关键词、案例名、引文、法条、法规或粘贴的 brief 出发。打开来源、检查引用，并在依赖前核验被引用文字。',
     'intro.disclaimer': 'JuriCodex 帮助你找到并理解可以打开和验证的<strong>真实法律权威材料</strong>。它是<strong>调研工具</strong>，不是法律建议；依赖前请核验来源，并在作出决定前咨询持牌律师。',
     'example.0': '房东可以因为正常磨损扣留我的押金吗？',
-    'example.1': 'Miranda v. Arizona 到底确立了什么规则？',
-    'example.2': '第四修正案对无令状车辆搜查的限制',
+    'example.1': '举报工作场所安全隐患后被解雇，可以研究哪些法律依据？',
+    'example.2': 'Miranda v. Arizona 到底确立了什么规则？',
+    'example.3': '第四修正案对无令状车辆搜查的限制',
     'placeholder.default': '用自然语言提问…（例如：举报安全违规后被解雇）',
     'placeholder.concept': '用自然语言描述法律概念或情境…',
     'placeholder.keyword': '输入关键词搜索判例法…',
@@ -566,8 +569,9 @@ const I18N = {
     'intro.toolkitBody': '從概念、關鍵字、案例名、引文、法條、法規或貼上的 brief 出發。打開來源、檢查引用，並在依賴前核驗被引用文字。',
     'intro.disclaimer': 'JuriCodex 幫助你找到並理解可以打開和驗證的<strong>真實法律權威材料</strong>。它是<strong>調研工具</strong>，不是法律建議；依賴前請核驗來源，並在作出決定前諮詢持牌律師。',
     'example.0': '房東可以因為正常磨損扣留我的押金嗎？',
-    'example.1': 'Miranda v. Arizona 到底確立了什麼規則？',
-    'example.2': '第四修正案對無令狀車輛搜查的限制',
+    'example.1': '舉報工作場所安全隱患後被解僱，可以研究哪些法律依據？',
+    'example.2': 'Miranda v. Arizona 到底確立了什麼規則？',
+    'example.3': '第四修正案對無令狀車輛搜查的限制',
     'placeholder.default': '用自然語言提問…（例如：舉報安全違規後被解雇）',
     'placeholder.concept': '用自然語言描述法律概念或情境…',
     'placeholder.keyword': '輸入關鍵字搜尋判例法…',
@@ -735,8 +739,9 @@ const I18N = {
     'intro.toolkitBody': 'Commencez par un concept, un mot-clé, un nom d’affaire, une citation, une loi, un règlement ou un mémoire collé. Ouvrez la source, examinez la citation et vérifiez le passage cité avant de vous y appuyer.',
     'intro.disclaimer': 'JuriCodex vous aide à trouver et comprendre de <strong>véritables autorités juridiques</strong> que vous pouvez ouvrir et vérifier. C’est un <strong>outil de recherche</strong>, pas un avis juridique; vérifiez les sources avant de vous y appuyer et consultez un avocat autorisé pour vos décisions.',
     'example.0': 'Mon propriétaire peut-il garder mon dépôt de garantie pour une usure normale ?',
-    'example.1': 'Que décide réellement Miranda v. Arizona ?',
-    'example.2': 'Limites du Quatrième Amendement sur les fouilles de voitures sans mandat',
+    'example.1': 'Puis-je être licencié après avoir signalé des risques de sécurité au travail ?',
+    'example.2': 'Que décide réellement Miranda v. Arizona ?',
+    'example.3': 'Limites du Quatrième Amendement sur les fouilles de voitures sans mandat',
     'placeholder.default': 'Posez une question en langage clair…  (p. ex. licenciement après signalement de violations de sécurité)',
     'placeholder.concept': 'Décrivez le concept juridique ou la situation en langage clair…',
     'placeholder.keyword': 'Saisissez des mots-clés pour rechercher la jurisprudence…',
@@ -904,8 +909,9 @@ const I18N = {
     'intro.toolkitBody': 'Comece com um conceito, palavra-chave, nome de caso, citação, lei, regulamento ou peça colada. Abra a fonte, revise a citação e verifique o trecho citado antes de confiar nele.',
     'intro.disclaimer': 'JuriCodex ajuda você a encontrar e entender <strong>autoridades jurídicas reais</strong> que pode abrir e verificar. É uma <strong>ferramenta de pesquisa</strong>, não aconselhamento jurídico; verifique as fontes antes de confiar nelas e consulte um advogado licenciado para decisões.',
     'example.0': 'Meu locador pode ficar com meu depósito por desgaste normal?',
-    'example.1': 'O que Miranda v. Arizona realmente decidiu?',
-    'example.2': 'Limites da Quarta Emenda em buscas de carros sem mandado',
+    'example.1': 'Posso ser demitido depois de relatar riscos de segurança no trabalho?',
+    'example.2': 'O que Miranda v. Arizona realmente decidiu?',
+    'example.3': 'Limites da Quarta Emenda em buscas de carros sem mandado',
     'placeholder.default': 'Pergunte em linguagem clara…  (ex.: demissão após denunciar violações de segurança)',
     'placeholder.concept': 'Descreva o conceito jurídico ou a situação em linguagem clara…',
     'placeholder.keyword': 'Digite palavras-chave para pesquisar jurisprudência…',
@@ -1073,8 +1079,9 @@ const I18N = {
     'intro.toolkitBody': '개념, 키워드, 사건명, 인용, 법령, 규정 또는 붙여 넣은 brief에서 시작하세요. 출처를 열고, 인용을 검토하며, 인용된 문구를 의존하기 전에 확인하세요.',
     'intro.disclaimer': 'JuriCodex는 열어 보고 확인할 수 있는 <strong>실제 법률 권위 자료</strong>를 찾고 이해하도록 돕습니다. 이는 <strong>리서치 도구</strong>이며 법률 자문이 아닙니다. 의존하기 전에 출처를 확인하고 결정에는 자격 있는 변호사와 상담하세요.',
     'example.0': '집주인이 정상적인 마모를 이유로 보증금을 가져갈 수 있나요?',
-    'example.1': 'Miranda v. Arizona는 실제로 무엇을 판시했나요?',
-    'example.2': '영장 없는 차량 수색에 대한 수정헌법 제4조의 제한',
+    'example.1': '직장 안전 문제를 신고한 뒤 해고되면 어떤 법적 근거를 조사할 수 있나요?',
+    'example.2': 'Miranda v. Arizona는 실제로 무엇을 판시했나요?',
+    'example.3': '영장 없는 차량 수색에 대한 수정헌법 제4조의 제한',
     'placeholder.default': '일상 언어로 질문하세요…  (예: 안전 위반 신고 후 해고)',
     'placeholder.concept': '법률 개념이나 상황을 일상 언어로 설명하세요…',
     'placeholder.keyword': '판례법 검색 키워드를 입력하세요…',
@@ -1242,8 +1249,9 @@ const I18N = {
     'intro.toolkitBody': '概念、キーワード、事件名、引用、制定法、規則、または貼り付けた brief から始められます。出典を開き、引用を確認し、引用された文言を依拠する前に確認できます。',
     'intro.disclaimer': 'JuriCodex は、開いて確認できる<strong>実在の法的権威資料</strong>を見つけ、理解するためのツールです。これは<strong>リサーチツール</strong>であり、法律助言ではありません。依拠する前に出典を確認し、判断には資格ある弁護士に相談してください。',
     'example.0': '通常の損耗を理由に家主は敷金を保持できますか？',
-    'example.1': 'Miranda v. Arizona は実際に何を判示しましたか？',
-    'example.2': '令状なしの車両捜索に対する第四修正の制限',
+    'example.1': '職場の安全上の問題を報告した後に解雇された場合、どの法的根拠を調べられますか？',
+    'example.2': 'Miranda v. Arizona は実際に何を判示しましたか？',
+    'example.3': '令状なしの車両捜索に対する第四修正の制限',
     'placeholder.default': '自然な言葉で質問…（例：安全違反を報告した後の解雇）',
     'placeholder.concept': '法的概念または状況を自然な言葉で説明してください…',
     'placeholder.keyword': '判例法を検索するキーワードを入力…',
@@ -1411,8 +1419,9 @@ const I18N = {
     'intro.toolkitBody': 'Bắt đầu từ khái niệm, từ khóa, tên vụ án, trích dẫn, đạo luật, quy định hoặc brief được dán vào. Mở nguồn, xem trích dẫn và kiểm chứng đoạn được trích trước khi dựa vào nó.',
     'intro.disclaimer': 'JuriCodex giúp bạn tìm và hiểu <strong>nguồn pháp lý có thẩm quyền thật</strong> mà bạn có thể mở và kiểm chứng. Đây là <strong>công cụ nghiên cứu</strong>, không phải tư vấn pháp lý; hãy kiểm tra nguồn trước khi dựa vào đó và hỏi luật sư được cấp phép khi cần quyết định.',
     'example.0': 'Chủ nhà có thể giữ tiền đặt cọc vì hao mòn thông thường không?',
-    'example.1': 'Miranda v. Arizona thực sự đã phán quyết điều gì?',
-    'example.2': 'Giới hạn của Tu chính án thứ tư đối với việc khám xe không có lệnh',
+    'example.1': 'Tôi có thể bị sa thải sau khi báo cáo nguy cơ an toàn tại nơi làm việc không?',
+    'example.2': 'Miranda v. Arizona thực sự đã phán quyết điều gì?',
+    'example.3': 'Giới hạn của Tu chính án thứ tư đối với việc khám xe không có lệnh',
     'placeholder.default': 'Hỏi bằng ngôn ngữ thường ngày…  (ví dụ: bị sa thải sau khi báo cáo vi phạm an toàn)',
     'placeholder.concept': 'Mô tả khái niệm pháp lý hoặc tình huống bằng ngôn ngữ thường ngày…',
     'placeholder.keyword': 'Nhập từ khóa để tìm án lệ…',
@@ -1926,6 +1935,8 @@ function detectLanguage() {
 
 let currentLang = detectLanguage();
 
+const EXAMPLE_LABELS = ['Housing', 'Employment', 'Criminal procedure', 'Constitutional rights'];
+
 function tr(key, vars = {}) {
   const table = I18N[currentLang] || I18N.en;
   const template = table[key] ?? I18N.en[key] ?? key;
@@ -1947,7 +1958,13 @@ function applyI18n() {
   document.documentElement.lang = currentLang === 'zh' ? 'zh-Hans' : (currentLang === 'zh-TW' ? 'zh-Hant' : currentLang);
   document.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = tr(el.dataset.i18n); });
   document.querySelectorAll('[data-i18n-html]').forEach((el) => { el.innerHTML = tr(el.dataset.i18nHtml); });
-  document.querySelectorAll('.examples .ex').forEach((b, i) => { b.textContent = tr(`example.${i}`); });
+  document.querySelectorAll('.examples .ex').forEach((b, i) => {
+    const label = EXAMPLE_LABELS[i] || '';
+    const question = tr(`example.${i}`);
+    b.dataset.label = label;
+    b.dataset.question = question;
+    b.innerHTML = `<span>${escapeHtml(label)}</span><strong>${escapeHtml(question)}</strong>`;
+  });
   document.querySelector('.foot')?.replaceChildren();
   const foot = document.querySelector('.foot');
   if (foot) foot.innerHTML = tr('footer.html');
@@ -2694,7 +2711,7 @@ input.addEventListener('keydown', (e) => {
 // ── Examples + New research ──────────────────────────────────────
 function bindExamples() {
   document.querySelectorAll('.ex').forEach((b) =>
-    b.addEventListener('click', () => { currentMode = 'chat'; send(b.textContent); }));
+    b.addEventListener('click', () => { currentMode = 'chat'; send(b.dataset.question || b.textContent); }));
 }
 bindExamples();
 

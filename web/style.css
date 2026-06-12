@@ -134,11 +134,14 @@ html, body {
   border-left: 3px solid var(--warn);
   padding: 10px 12px; border-radius: 8px; margin-top: 14px;
 }
-.examples { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.examples { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; margin-top: 18px; }
 .ex {
   background: var(--panel); border: 1px solid var(--line); color: var(--ink);
-  padding: 9px 13px; border-radius: 12px; font-size: 13px; cursor: pointer; text-align: left;
+  padding: 10px 12px; border-radius: 10px; font-size: 13px; cursor: pointer; text-align: left;
+  min-height: 72px; display: flex; flex-direction: column; gap: 5px;
 }
+.ex span { color: var(--accent-2); font-size: 10.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; }
+.ex strong { font-size: 12.8px; line-height: 1.35; font-weight: 650; }
 .ex:hover { border-color: var(--accent); background: var(--accent-soft); }
 
 /* ── A research turn ──────────────────────────────────────────── */
@@ -616,6 +619,7 @@ select.set-input { width: 100%; flex-basis: 100%; cursor: pointer; }
    composer and the legal pages don't crowd the edges or overflow. */
 @media (max-width: 600px) {
   .chat, .composer-wrap, .intro { padding-left: 12px; padding-right: 12px; }
+  .examples { grid-template-columns: 1fr; }
   .platform-split { grid-template-columns: 1fr; }
   .case, .statute { padding: 11px 12px; }
   .detail-grid { grid-template-columns: 1fr; }

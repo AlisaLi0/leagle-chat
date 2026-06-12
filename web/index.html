@@ -9,7 +9,7 @@
        serves this frontend and the /api/* routes from the same host, so all
        requests, cookies and the OAuth callback stay first-party. -->
   <meta name="leagle-api-base" content="" />
-  <link rel="stylesheet" href="style.css?v=20260612a" />
+  <link rel="stylesheet" href="style.css?v=20260612b" />
 </head>
 <body>
   <div class="app">
@@ -99,9 +99,10 @@
             attorney for decisions.
           </p>
           <div class="examples">
-            <button class="ex">Can my landlord keep my security deposit for normal wear and tear?</button>
-            <button class="ex">What did Miranda v. Arizona actually hold?</button>
-            <button class="ex">Fourth Amendment limits on warrantless car searches</button>
+            <button class="ex" data-label="Housing" data-question="Can my landlord keep my security deposit for normal wear and tear?"><span>Housing</span><strong>Can my landlord keep my security deposit for normal wear and tear?</strong></button>
+            <button class="ex" data-label="Employment" data-question="Can I be fired after reporting workplace safety violations?"><span>Employment</span><strong>Can I be fired after reporting workplace safety violations?</strong></button>
+            <button class="ex" data-label="Criminal procedure" data-question="What did Miranda v. Arizona actually hold?"><span>Criminal procedure</span><strong>What did Miranda v. Arizona actually hold?</strong></button>
+            <button class="ex" data-label="Constitutional rights" data-question="Fourth Amendment limits on warrantless car searches"><span>Constitutional rights</span><strong>Fourth Amendment limits on warrantless car searches</strong></button>
           </div>
         </div>
       </main>
@@ -158,6 +159,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260612a"></script>
+  <script src="app.js?v=20260612b"></script>
 </body>
 </html>
