@@ -3,13 +3,13 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>JuriCodex — find the law, reason through it, verify every step</title>
-  <meta name="description" content="Ask a legal question in plain English. JuriCodex reasons through it grounded in real US court opinions — with the authorities, citations, and links you can verify yourself." />
+  <title>JuriCodex — legal research grounded in sources you can verify</title>
+  <meta name="description" content="JuriCodex is a legal research workspace for U.S. law. Ask in plain English, search real cases, statutes, and regulations, and review citations you can open and verify." />
   <!-- Backend API base. Empty = same-origin: the backend (juricodex.online)
        serves this frontend and the /api/* routes from the same host, so all
        requests, cookies and the OAuth callback stay first-party. -->
   <meta name="leagle-api-base" content="" />
-  <link rel="stylesheet" href="style.css?v=20260611t" />
+  <link rel="stylesheet" href="style.css?v=20260612a" />
 </head>
 <body>
   <div class="app">
@@ -54,7 +54,7 @@
       <header class="topbar">
         <button class="hamburger" id="hamburger" aria-label="Menu">☰</button>
         <div class="topbar-title">JuriCodex Platform<span class="beta-badge">Beta</span></div>
-        <div class="topbar-tag" data-i18n="topbar.tag">Find the law · reason through it · verify every step</div>
+        <div class="topbar-tag" data-i18n="topbar.tag">Find the law · verify the source · understand what it says</div>
         <select id="langSelect" class="lang-select" aria-label="Language">
           <option value="en">English</option>
           <option value="es">Español</option>
@@ -70,32 +70,33 @@
 
       <main id="chat" class="chat">
         <div class="intro">
-          <h1 data-i18n="intro.h1">Find the law. Reason through it. Verify every step.</h1>
+          <h1 data-i18n="intro.h1">Find the law. Verify the source. Understand what it says.</h1>
           <p data-i18n="intro.lead">
-            JuriCodex Platform is a legal research workspace with two ways in:
-            a Legal Reasoning Engine for working through questions, and a Legal Research
-            Toolkit for searching, checking, and verifying primary law directly.
+            JuriCodex is a legal research workspace for U.S. law. Ask in plain English,
+            search real cases, statutes, and regulations, and review citations you can
+            open and verify.
           </p>
           <div class="platform-split">
             <div class="platform-card">
               <div class="platform-kicker" data-i18n="intro.engineKicker">Legal Reasoning Engine</div>
-              <h2 data-i18n="intro.engineTitle">When the work goes beyond search.</h2>
-              <p data-i18n="intro.engineBody">Ask a question in plain English. JuriCodex clarifies when facts matter,
-                searches real authorities, refines the query when needed, and shows what
-                the answer depends on.</p>
+              <h2 data-i18n="intro.engineTitle">Start with a question, stay grounded in sources.</h2>
+              <p data-i18n="intro.engineBody">Ask in plain English. JuriCodex searches real legal authorities, organizes
+                what it finds, and shows where the answer depends on facts or unresolved
+                law.</p>
             </div>
             <div class="platform-card">
               <div class="platform-kicker" data-i18n="intro.toolkitKicker">Legal Research Toolkit</div>
-              <h2 data-i18n="intro.toolkitTitle">Search it. Cite it. Verify it.</h2>
-              <p data-i18n="intro.toolkitBody">Start from a concept, keyword, case name, citation, or pasted brief.
-                Find source-backed cases, statutes, regulations, quote checks, and
-                treatment-lite signals you can inspect.</p>
+              <h2 data-i18n="intro.toolkitTitle">Search it. Cite it. Check it.</h2>
+              <p data-i18n="intro.toolkitBody">Start from a concept, keyword, case name, citation, statute, regulation,
+                or pasted brief. Open the source, inspect the citation, and verify quoted
+                language before relying on it.</p>
             </div>
           </div>
           <p class="disclaimer" data-i18n-html="intro.disclaimer">
-            JuriCodex reasons from <strong>real primary sources</strong> you can open and
-            verify. It is a <strong>research tool</strong> — verify the authorities before
-            you rely on the analysis, and consult a licensed attorney for an actual decision.
+            JuriCodex helps you find and understand <strong>real legal authorities</strong>
+            you can open and verify. It is a <strong>research tool</strong>, not legal
+            advice; verify the sources before relying on them and consult a licensed
+            attorney for decisions.
           </p>
           <div class="examples">
             <button class="ex">Can my landlord keep my security deposit for normal wear and tear?</button>
@@ -157,6 +158,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20260611t"></script>
+  <script src="app.js?v=20260612a"></script>
 </body>
 </html>
