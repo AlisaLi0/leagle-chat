@@ -2500,6 +2500,7 @@ async function consumeChatStream(body, t, turnSnapshot, opts = {}) {
   let buf = '';
   let answerRaw = opts.initialAnswer || '';
   let clarified = opts.initialClarified || '';
+  let doneSeen = false;
   while (true) {
     const { done, value } = await reader.read();
     if (done) break;
@@ -2595,6 +2596,7 @@ async function consumeChatStream(body, t, turnSnapshot, opts = {}) {
         }
         warn.textContent = tr('warning.prefix', { message: obj.message || tr('warning.default') });
       } else if (ev === 'done') {
+        doneSeen = true;
         if (obj.session_id) currentSessionId = obj.session_id;
         activeChatJobId = null;
         activeChatEventId = 0;
@@ -2609,7 +2611,7 @@ async function consumeChatStream(body, t, turnSnapshot, opts = {}) {
       }
     }
   }
-  return { answerRaw, clarified };
+  return { answerRaw, clarified, doneSeen };
 }
 
 chat.addEventListener('click', (e) => {
@@ -2826,7 +2828,7 @@ async function send(text) {
     });
     answerRaw = result.answerRaw;
     clarified = result.clarified;
-    streamCompleted = true;
+    streamCompleted = !!result.doneSeen;
   } catch (err) {
     clearTimeout(idleTimer);
     t.statusEl.style.display = 'none';
@@ -2843,7 +2845,7 @@ async function send(text) {
     clearTimeout(idleTimer);
   }
 
-  if (!streamCompleted && activeChatJobId && !answerRaw && !clarified) {
+  if (!streamCompleted && activeChatJobId) {
     busy = false; sendBtn.disabled = false;
     input.focus();
     return;
@@ -3591,9 +3593,7 @@ async function resumePendingChatJob() {
   if (!messages.length || messages[messages.length - 1].role !== 'user' || messages[messages.length - 1].content !== question) {
     messages.push({ role: 'user', content: question });
   }
-  if (!previousTurns.length || (previousTurns[previousTurns.length - 1] || {}).user !== question) {
-    addUser(question);
-  }
+  addUser(question);
 
   const t = newBotTurn();
   const turnSnapshot = {
