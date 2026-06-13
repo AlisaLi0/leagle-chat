@@ -2494,6 +2494,124 @@ chat.addEventListener('click', async (e) => {
   }
 });
 
+async function consumeChatStream(body, t, turnSnapshot, opts = {}) {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let answerRaw = opts.initialAnswer || '';
+  let clarified = opts.initialClarified || '';
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (opts.onChunk) opts.onChunk();
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n\n')) >= 0) {
+      const block = buf.slice(0, idx); buf = buf.slice(idx + 2);
+      let ev = 'message', data = '';
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event:')) ev = line.slice(6).trim();
+        else if (line.startsWith('data:')) data += line.slice(5).trim();
+      }
+      let obj = {};
+      try { obj = JSON.parse(data); } catch { continue; }
+      if (obj._event_id) activeChatEventId = Math.max(activeChatEventId, Number(obj._event_id) || 0);
+
+      if (ev === 'job') {
+        activeChatJobId = obj.job_id || obj._job_id || activeChatJobId;
+        if (activeChatJobId) { try { sessionStorage.setItem(ACTIVE_JOB_KEY, activeChatJobId); } catch { /* ignore */ } }
+        if (obj.session_id) currentSessionId = obj.session_id;
+      } else if (ev === 'status') {
+        t.statusText.textContent = obj.message || '…';
+        if (/^(search|refining|resolving|verifying|buscando|afinando|resolviendo|verificando|recherche|résolution|vérification|buscando|refinando|resolvendo|verificando|검색|해석|검증|検索|調整|確認|Tìm|Đang tìm|Đang phân giải|Đang kiểm tra|正在搜索|正在搜尋|正在优化|正在最佳化|正在把|正在驗證|正在验证)/i.test(obj.message || '')) setStep(t.el, 'search', 'active', true);
+        else setStep(t.el, 'analyze', 'active');
+      } else if (ev === 'research_plan') {
+        turnSnapshot.researchPlan = obj;
+        setStep(t.el, 'analyze', 'done');
+        setStep(t.el, 'search', 'active');
+        renderResearchPlan(t.el, obj);
+        scrollDown();
+      } else if (ev === 'clarify') {
+        clarified = obj.question || '';
+        turnSnapshot.clarify = clarified;
+        setStep(t.el, 'analyze', 'done');
+        t.statusEl.style.display = 'none';
+        t.answerEl.style.display = '';
+        t.answerEl.className = 'answer clarify';
+        t.answerEl.textContent = obj.question || '';
+      } else if (ev === 'cases') {
+        turnSnapshot.cases = obj;
+        const authoritySuffix = currentLang === 'en'
+          ? (obj.count > 1 ? 'ies' : 'y')
+          : (currentLang === 'es' ? (obj.count === 1 ? '' : 'es') : '');
+        t.statusText.textContent = obj.count
+          ? tr('cases.found', { count: obj.count, suffix: authoritySuffix, query: obj.query })
+          : tr('cases.none', { query: obj.query });
+        setStep(t.el, 'authorities', 'done', true);
+        setStep(t.el, 'answer', 'active');
+        if (obj.count) {
+          t.authEl.style.display = '';
+          t.authCnt.textContent = '· ' + obj.count;
+          renderCases(t.casesEl, t.turnId, obj.cases || []);
+        }
+        scrollDown();
+      } else if (ev === 'statutes') {
+        turnSnapshot.statutes = obj;
+        if (obj.count) {
+          t.statEl.style.display = '';
+          t.statCnt.textContent = '· ' + obj.count;
+          renderStatutes(t.statListEl, t.turnId, obj.statutes || []);
+        }
+        scrollDown();
+      } else if (ev === 'brief_review') {
+        turnSnapshot.briefReview = obj;
+        setStep(t.el, 'authorities', 'done', true);
+        setStep(t.el, 'answer', 'active');
+        renderBriefReview(t.el, obj);
+        scrollDown();
+      } else if (ev === 'citation_extract') {
+        turnSnapshot.citationExtract = obj;
+        setStep(t.el, 'authorities', 'done', true);
+        setStep(t.el, 'answer', 'active');
+        renderCitationExtract(t.el, obj);
+        scrollDown();
+      } else if (ev === 'token') {
+        answerRaw += obj.text || '';
+        setStep(t.el, 'answer', 'active', true);
+        t.answerEl.style.display = '';
+        t.answerEl.innerHTML = renderWithCites(answerRaw, t.turnId);
+        scrollDown();
+      } else if (ev === 'error') {
+        t.answerEl.style.display = '';
+        t.answerEl.className = 'answer note';
+        t.answerEl.textContent = obj.message || tr('error.generic');
+      } else if (ev === 'warning') {
+        turnSnapshot.warnings.push(obj.message || tr('warning.default'));
+        let warn = t.el.querySelector('.answer-warn');
+        if (!warn) {
+          warn = document.createElement('div');
+          warn.className = 'answer-warn';
+          t.answerEl.insertAdjacentElement('beforebegin', warn);
+        }
+        warn.textContent = tr('warning.prefix', { message: obj.message || tr('warning.default') });
+      } else if (ev === 'done') {
+        if (obj.session_id) currentSessionId = obj.session_id;
+        activeChatJobId = null;
+        activeChatEventId = 0;
+        try { sessionStorage.removeItem(ACTIVE_JOB_KEY); } catch { /* ignore */ }
+        if (!clarified) setStep(t.el, 'answer', 'done', true);
+        t.statusEl.style.display = 'none';
+        if (answerRaw.trim()) {
+          t.answerEl.className = 'answer rendered';
+          t.answerEl.innerHTML = renderMarkdown(answerRaw, t.turnId);
+          t.actionsEl.style.display = '';
+        }
+      }
+    }
+  }
+  return { answerRaw, clarified };
+}
+
 chat.addEventListener('click', (e) => {
   const btn = e.target.closest('.copy-cite');
   if (!btn) return;
@@ -2626,6 +2744,7 @@ async function send(text) {
   const t = newBotTurn();
   let answerRaw = '';
   let clarified = '';
+  let streamCompleted = false;
   const turnSnapshot = {
     user: text,
     answer: '',
@@ -2654,7 +2773,13 @@ async function send(text) {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json', ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}) },
-      body: JSON.stringify({ messages, mode: currentMode, language: currentLang }),
+      body: JSON.stringify({
+        messages,
+        mode: currentMode,
+        language: currentLang,
+        session_id: currentSessionId,
+        turns: sessionTurns,
+      }),
       signal: ctrl.signal,
     });
     // Session expired (or never signed in): drop back to the sign-in gate and
@@ -2694,122 +2819,23 @@ async function send(text) {
       return;
     }
     if (!resp.ok || !resp.body) throw new Error('HTTP ' + resp.status);
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = '';
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      bumpIdle();
-      buf += decoder.decode(value, { stream: true });
-      let idx;
-      while ((idx = buf.indexOf('\n\n')) >= 0) {
-        const block = buf.slice(0, idx); buf = buf.slice(idx + 2);
-        let ev = 'message', data = '';
-        for (const line of block.split('\n')) {
-          if (line.startsWith('event:')) ev = line.slice(6).trim();
-          else if (line.startsWith('data:')) data += line.slice(5).trim();
-        }
-        let obj = {};
-        try { obj = JSON.parse(data); } catch { continue; }
-
-        if (ev === 'status') {
-          t.statusText.textContent = obj.message || '…';
-          if (/^(search|refining|resolving|verifying|buscando|afinando|resolviendo|verificando|recherche|résolution|vérification|buscando|refinando|resolvendo|verificando|검색|해석|검증|検索|調整|確認|Tìm|Đang tìm|Đang phân giải|Đang kiểm tra|正在搜索|正在搜尋|正在优化|正在最佳化|正在把|正在驗證|正在验证)/i.test(obj.message || '')) setStep(t.el, 'search', 'active', true);
-          else setStep(t.el, 'analyze', 'active');
-        } else if (ev === 'research_plan') {
-          turnSnapshot.researchPlan = obj;
-          setStep(t.el, 'analyze', 'done');
-          setStep(t.el, 'search', 'active');
-          renderResearchPlan(t.el, obj);
-          scrollDown();
-        } else if (ev === 'clarify') {
-          clarified = obj.question || '';
-          turnSnapshot.clarify = clarified;
-          setStep(t.el, 'analyze', 'done');
-          t.statusEl.style.display = 'none';
-          t.answerEl.style.display = '';
-          t.answerEl.className = 'answer clarify';
-          t.answerEl.textContent = obj.question || '';
-        } else if (ev === 'cases') {
-          turnSnapshot.cases = obj;
-          const authoritySuffix = currentLang === 'en'
-            ? (obj.count > 1 ? 'ies' : 'y')
-            : (currentLang === 'es' ? (obj.count === 1 ? '' : 'es') : '');
-          t.statusText.textContent = obj.count
-            ? tr('cases.found', { count: obj.count, suffix: authoritySuffix, query: obj.query })
-            : tr('cases.none', { query: obj.query });
-          setStep(t.el, 'authorities', 'done', true);
-          setStep(t.el, 'answer', 'active');
-          if (obj.count) {
-            t.authEl.style.display = '';
-            t.authCnt.textContent = '· ' + obj.count;
-            renderCases(t.casesEl, t.turnId, obj.cases || []);
-          }
-          scrollDown();
-        } else if (ev === 'statutes') {
-          turnSnapshot.statutes = obj;
-          if (obj.count) {
-            t.statEl.style.display = '';
-            t.statCnt.textContent = '· ' + obj.count;
-            renderStatutes(t.statListEl, t.turnId, obj.statutes || []);
-          }
-          scrollDown();
-        } else if (ev === 'brief_review') {
-          turnSnapshot.briefReview = obj;
-          setStep(t.el, 'authorities', 'done', true);
-          setStep(t.el, 'answer', 'active');
-          renderBriefReview(t.el, obj);
-          scrollDown();
-        } else if (ev === 'citation_extract') {
-          turnSnapshot.citationExtract = obj;
-          setStep(t.el, 'authorities', 'done', true);
-          setStep(t.el, 'answer', 'active');
-          renderCitationExtract(t.el, obj);
-          scrollDown();
-        } else if (ev === 'token') {
-          answerRaw += obj.text || '';
-          setStep(t.el, 'answer', 'active', true);
-          t.answerEl.style.display = '';
-          t.answerEl.innerHTML = renderWithCites(answerRaw, t.turnId);
-          scrollDown();
-        } else if (ev === 'error') {
-          t.answerEl.style.display = '';
-          t.answerEl.className = 'answer note';
-          t.answerEl.textContent = obj.message || tr('error.generic');
-        } else if (ev === 'warning') {
-          turnSnapshot.warnings.push(obj.message || tr('warning.default'));
-          // Non-fatal advisory (e.g. a citation-integrity check). Show it as a
-          // distinct caution note above/with the answer without replacing it.
-          let warn = t.el.querySelector('.answer-warn');
-          if (!warn) {
-            warn = document.createElement('div');
-            warn.className = 'answer-warn';
-            t.answerEl.insertAdjacentElement('beforebegin', warn);
-          }
-          warn.textContent = tr('warning.prefix', { message: obj.message || tr('warning.default') });
-        } else if (ev === 'done') {
-          clearTimeout(idleTimer);
-          if (!clarified) setStep(t.el, 'answer', 'done', true);
-          t.statusEl.style.display = 'none';
-          // Final pass: render the streamed answer as Markdown and expose Copy.
-          if (answerRaw.trim()) {
-            t.answerEl.className = 'answer rendered';
-            t.answerEl.innerHTML = renderMarkdown(answerRaw, t.turnId);
-            t.actionsEl.style.display = '';
-          }
-        }
-      }
-    }
+    const result = await consumeChatStream(resp.body, t, turnSnapshot, {
+      onChunk: bumpIdle,
+      initialAnswer: answerRaw,
+      initialClarified: clarified,
+    });
+    answerRaw = result.answerRaw;
+    clarified = result.clarified;
+    streamCompleted = true;
   } catch (err) {
     clearTimeout(idleTimer);
     t.statusEl.style.display = 'none';
     t.answerEl.style.display = '';
     const aborted = err && (err.name === 'AbortError' || ctrl.signal.aborted);
     const message = aborted
-      ? tr('timeout')
+      ? (activeChatJobId
+        ? 'The research is still running on the server. Keep this tab open or refresh in a moment to resume it.'
+        : tr('timeout'))
       : tr('connectionError', { message: err && err.message ? err.message : 'please try again.' });
     turnSnapshot.warning = message;
     renderRetryNote(t.answerEl, message, text);
@@ -2817,12 +2843,19 @@ async function send(text) {
     clearTimeout(idleTimer);
   }
 
+  if (!streamCompleted && activeChatJobId && !answerRaw && !clarified) {
+    busy = false; sendBtn.disabled = false;
+    input.focus();
+    return;
+  }
+
   const finalAnswer = clarified || answerRaw || tr('assistant.fallback');
   turnSnapshot.answer = answerRaw;
   messages.push({ role: 'assistant', content: finalAnswer });
   sessionTurns.push(turnSnapshot);
   busy = false; sendBtn.disabled = false;
-  // Persist the thread to the account when signed in (durable, cross-device).
+  // The backend job saves the completed thread even if this browser disconnects.
+  // Keep this as an idempotent client-side refresh/update for old jobs and local UI.
   autosaveSession();
   input.focus();
 }
@@ -2858,6 +2891,9 @@ function newResearch() {
   turnSeq = 0;
   currentMode = 'chat';
   currentSessionId = null;
+  activeChatJobId = null;
+  activeChatEventId = 0;
+  try { sessionStorage.removeItem(ACTIVE_JOB_KEY); } catch { /* ignore */ }
   chat.innerHTML = INTRO_HTML;
   bindExamples();
   applyI18n();
@@ -2879,11 +2915,15 @@ app.addEventListener('click', (e) => {
 // account block offers OAuth sign-in (only the providers the server has
 // configured) and sign-out.
 const HKEY = 'leagle-history';
+const ACTIVE_JOB_KEY = 'leagle-active-chat-job';
 const historyEl = document.getElementById('history');
 const accountEl = document.getElementById('account');
 let me = null;                 // current signed-in user, or null
 let providers = [];            // configured OAuth providers, e.g. ['github']
 let currentSessionId = null;   // backend id of the active thread (when signed in)
+let activeChatJobId = null;    // durable backend chat job currently being displayed
+let activeChatEventId = 0;     // last replayed durable chat event id
+let resumeChecked = false;     // avoid opening the same pending job twice on load
 let authReady = false;         // true once /api/auth/me has resolved
 let authPromise = null;        // the in-flight initial auth load
 let billingCfg = null;         // { product_id, public_key, plans } or null
@@ -3212,11 +3252,14 @@ async function loadAuth() {
   authReady = true;
   renderAccount();
   refreshHistory();
+  resumePendingChatJob();
 }
 
 async function logout() {
   try { await api('/api/auth/logout', { method: 'POST' }); } catch { /* ignore */ }
   me = null; currentSessionId = null; sessionTurns.length = 0;
+  activeChatJobId = null; activeChatEventId = 0; resumeChecked = false;
+  try { sessionStorage.removeItem(ACTIVE_JOB_KEY); } catch { /* ignore */ }
   renderAccount();
   refreshHistory();
 }
@@ -3501,6 +3544,88 @@ async function autosaveSession() {
     });
     if (r.ok) { currentSessionId = (await r.json()).id; refreshHistory(); }
   } catch { /* ignore */ }
+}
+
+async function resumePendingChatJob() {
+  if (!me || busy || resumeChecked) return;
+  resumeChecked = true;
+  let job;
+  let storedJobId = '';
+  try { storedJobId = sessionStorage.getItem(ACTIVE_JOB_KEY) || ''; } catch { storedJobId = ''; }
+  try {
+    if (storedJobId) {
+      const r = await api('/api/chat/jobs/' + encodeURIComponent(storedJobId));
+      if (r.ok) job = (await r.json()).job;
+    }
+    if (!job) {
+      const r = await api('/api/chat/jobs/active');
+      if (!r.ok) return;
+      job = (await r.json()).job;
+    }
+  } catch { return; }
+  if (!job || !job.id) { try { sessionStorage.removeItem(ACTIVE_JOB_KEY); } catch { /* ignore */ } return; }
+  const req = job.request || {};
+  const reqMessages = Array.isArray(req.messages) ? req.messages : [];
+  const question = job.question || (reqMessages[reqMessages.length - 1] || {}).content || '';
+  if (!question) return;
+
+  messages.length = 0;
+  sessionTurns.length = 0;
+  turnSeq = 0;
+  currentMode = req.mode || job.mode || 'chat';
+  currentLang = req.language || job.language || currentLang;
+  currentSessionId = job.session_id || req.session_id || currentSessionId;
+  activeChatJobId = job.id;
+  activeChatEventId = 0;
+  chat.innerHTML = '';
+  const previousTurns = Array.isArray(req.turns) ? req.turns : [];
+  const previousMessages = reqMessages.slice(0, Math.max(0, reqMessages.length - 1));
+  previousTurns.forEach((turn) => {
+    const q = turn && turn.user;
+    if (!q) return;
+    addUser(q);
+    renderSavedBotTurn(turn);
+    sessionTurns.push(turn);
+  });
+  messages.push(...previousMessages);
+  if (!messages.length || messages[messages.length - 1].role !== 'user' || messages[messages.length - 1].content !== question) {
+    messages.push({ role: 'user', content: question });
+  }
+  if (!previousTurns.length || (previousTurns[previousTurns.length - 1] || {}).user !== question) {
+    addUser(question);
+  }
+
+  const t = newBotTurn();
+  const turnSnapshot = {
+    user: question,
+    answer: '',
+    clarify: '',
+    researchPlan: null,
+    cases: null,
+    statutes: null,
+    briefReview: null,
+    citationExtract: null,
+    warnings: [],
+  };
+  busy = true;
+  sendBtn.disabled = true;
+  try {
+    const r = await api('/api/chat/jobs/' + encodeURIComponent(job.id) + '/events');
+    if (!r.ok || !r.body) throw new Error('HTTP ' + r.status);
+    const result = await consumeChatStream(r.body, t, turnSnapshot);
+    turnSnapshot.answer = result.answerRaw;
+    messages.push({ role: 'assistant', content: result.clarified || result.answerRaw || tr('assistant.fallback') });
+    sessionTurns.push(turnSnapshot);
+    autosaveSession();
+  } catch {
+    t.statusEl.style.display = 'none';
+    t.answerEl.style.display = '';
+    renderRetryNote(t.answerEl, tr('connectionError', { message: 'please try again.' }), question);
+  } finally {
+    busy = false;
+    sendBtn.disabled = false;
+    input.focus();
+  }
 }
 
 // Open a saved thread: load its transcript and render it read-only.

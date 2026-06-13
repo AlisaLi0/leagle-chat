@@ -144,6 +144,29 @@ CREATE TABLE IF NOT EXISTS email_verifications (
     FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_email_verif_user ON email_verifications(user_id, consumed_at, id DESC);
+CREATE TABLE IF NOT EXISTS chat_jobs (
+    id          TEXT PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    session_id  TEXT,
+    title       TEXT NOT NULL,
+    request     TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'running',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    finished_at TEXT,
+    payload     TEXT,
+    FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_chat_jobs_user_status ON chat_jobs(user_id, status, updated_at DESC);
+CREATE TABLE IF NOT EXISTS chat_events (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id      TEXT NOT NULL,
+    event       TEXT NOT NULL,
+    data        TEXT NOT NULL,
+    created_at  TEXT NOT NULL,
+    FOREIGN KEY(job_id) REFERENCES chat_jobs(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_chat_events_job ON chat_events(job_id, id);
 """
 
 
@@ -449,6 +472,123 @@ def save_session(user_id: int, *, session_id: str | None, title: str,
             )
         conn.commit()
         return sid
+    finally:
+        conn.close()
+
+
+# ── Durable chat jobs ──────────────────────────────────────────────────────
+
+def create_chat_job(user_id: int, *, session_id: str | None, title: str,
+                    request: dict) -> str:
+    conn = _connect()
+    try:
+        now = _now()
+        job_id = uuid.uuid4().hex
+        conn.execute(
+            """INSERT INTO chat_jobs (id, user_id, session_id, title, request,
+                                      status, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, 'running', ?, ?)""",
+            (job_id, user_id, session_id, (title or "Research")[:200],
+             json.dumps(request, ensure_ascii=False), now, now),
+        )
+        conn.commit()
+        return job_id
+    finally:
+        conn.close()
+
+
+def get_chat_job(user_id: int, job_id: str) -> dict | None:
+    conn = _connect()
+    try:
+        row = conn.execute(
+            "SELECT * FROM chat_jobs WHERE id=? AND user_id=?",
+            (job_id, user_id),
+        ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        for key in ("request", "payload"):
+            if data.get(key):
+                try:
+                    data[key] = json.loads(data[key])
+                except (TypeError, ValueError):
+                    data[key] = None
+        return data
+    finally:
+        conn.close()
+
+
+def latest_running_chat_job(user_id: int) -> dict | None:
+    conn = _connect()
+    try:
+        row = conn.execute(
+            """SELECT * FROM chat_jobs WHERE user_id=? AND status='running'
+               ORDER BY updated_at DESC LIMIT 1""",
+            (user_id,),
+        ).fetchone()
+        if not row:
+            return None
+        data = dict(row)
+        try:
+            data["request"] = json.loads(data.get("request") or "{}")
+        except (TypeError, ValueError):
+            data["request"] = {}
+        return data
+    finally:
+        conn.close()
+
+
+def add_chat_event(job_id: str, event: str, data: dict) -> int:
+    conn = _connect()
+    try:
+        now = _now()
+        cur = conn.execute(
+            "INSERT INTO chat_events (job_id, event, data, created_at) VALUES (?, ?, ?, ?)",
+            (job_id, event, json.dumps(data, ensure_ascii=False), now),
+        )
+        conn.execute("UPDATE chat_jobs SET updated_at=? WHERE id=?", (now, job_id))
+        conn.commit()
+        return int(cur.lastrowid)
+    finally:
+        conn.close()
+
+
+def list_chat_events(user_id: int, job_id: str, *, after_id: int = 0) -> list[dict]:
+    conn = _connect()
+    try:
+        rows = conn.execute(
+            """SELECT e.id, e.event, e.data, e.created_at
+               FROM chat_events e JOIN chat_jobs j ON j.id=e.job_id
+               WHERE e.job_id=? AND j.user_id=? AND e.id>?
+               ORDER BY e.id""",
+            (job_id, user_id, int(after_id or 0)),
+        ).fetchall()
+        out = []
+        for row in rows:
+            item = dict(row)
+            try:
+                item["data"] = json.loads(item.get("data") or "{}")
+            except (TypeError, ValueError):
+                item["data"] = {}
+            out.append(item)
+        return out
+    finally:
+        conn.close()
+
+
+def finish_chat_job(job_id: str, *, status: str, session_id: str | None = None,
+                    payload: dict | None = None) -> None:
+    conn = _connect()
+    try:
+        now = _now()
+        conn.execute(
+            """UPDATE chat_jobs SET status=?, session_id=COALESCE(?, session_id),
+                                      payload=?, updated_at=?, finished_at=?
+               WHERE id=?""",
+            (status, session_id, json.dumps(payload, ensure_ascii=False) if payload is not None else None,
+             now, now, job_id),
+        )
+        conn.commit()
     finally:
         conn.close()
 

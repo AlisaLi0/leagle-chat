@@ -56,6 +56,7 @@ CHAT_MAX_PER_HOUR = int(os.getenv("LEAGLE_CHAT_MAX_PER_HOUR", "30"))
 MAX_CHAT_MESSAGES = int(os.getenv("LEAGLE_MAX_CHAT_MESSAGES", "20"))
 MAX_CHAT_MESSAGE_CHARS = int(os.getenv("LEAGLE_MAX_CHAT_MESSAGE_CHARS", "50000"))
 MAX_SESSION_PAYLOAD_BYTES = int(os.getenv("LEAGLE_MAX_SESSION_PAYLOAD_BYTES", "2000000"))
+CHAT_EVENT_POLL_MS = int(os.getenv("LEAGLE_CHAT_EVENT_POLL_MS", "250"))
 
 cl = CourtListener(api_token=os.getenv("COURTLISTENER_API_TOKEN"))
 ecfr = ECFR()
@@ -63,6 +64,7 @@ uscode = USCode(os.getenv("GOVINFO_API_KEY", ""))
 db.init_db()
 app = FastAPI(title="leagle-chat")
 logger = logging.getLogger("leagle-chat")
+_chat_job_tasks: dict[str, asyncio.Task] = {}
 
 # Credentialed (cookie) auth only works same-origin or with an explicit origin
 # allow-list — the CORS spec forbids credentials with a "*" origin. The login /
@@ -239,6 +241,173 @@ _CASE_ANALYSIS_SYSTEM = (
 
 def _sse(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _decode_sse(block: str) -> tuple[str, dict]:
+    event = "message"
+    data = ""
+    for line in block.splitlines():
+        if line.startswith("event:"):
+            event = line[6:].strip() or "message"
+        elif line.startswith("data:"):
+            data += line[5:].strip()
+    try:
+        payload = json.loads(data) if data else {}
+    except (TypeError, ValueError):
+        payload = {}
+    return event, payload if isinstance(payload, dict) else {"value": payload}
+
+
+def _public_chat_job(job: dict) -> dict:
+    req = job.get("request") or {}
+    messages = req.get("messages") if isinstance(req, dict) else []
+    question = next((m.get("content", "") for m in reversed(messages or [])
+                     if isinstance(m, dict) and m.get("role") == "user"), "")
+    return {
+        "id": job.get("id"),
+        "status": job.get("status"),
+        "session_id": job.get("session_id"),
+        "title": job.get("title") or "Research",
+        "question": question,
+        "mode": (req or {}).get("mode") or "chat",
+        "language": (req or {}).get("language") or "en",
+        "request": req,
+        "created_at": job.get("created_at"),
+        "updated_at": job.get("updated_at"),
+        "finished_at": job.get("finished_at"),
+    }
+
+
+async def _stream_chat_job_events(request: Request, user_id: int, job_id: str,
+                                  *, after_id: int = 0) -> AsyncIterator[str]:
+    last_id = int(after_id or 0)
+    while True:
+        events = await asyncio.to_thread(db.list_chat_events, user_id, job_id, after_id=last_id)
+        for item in events:
+            last_id = int(item["id"])
+            data = dict(item.get("data") or {})
+            data.setdefault("_job_id", job_id)
+            data.setdefault("_event_id", last_id)
+            yield _sse(item["event"], data)
+            if item["event"] == "done":
+                return
+        job = await asyncio.to_thread(db.get_chat_job, user_id, job_id)
+        if not job:
+            yield _sse("error", {"message": "Research job not found."})
+            yield _sse("done", {})
+            return
+        if job.get("status") != "running":
+            yield _sse("done", {"session_id": job.get("session_id"), "server_saved": True})
+            return
+        if await request.is_disconnected():
+            return
+        await asyncio.sleep(max(CHAT_EVENT_POLL_MS, 50) / 1000)
+
+
+def _remember_chat_task(job_id: str, task: asyncio.Task) -> None:
+    _chat_job_tasks[job_id] = task
+    task.add_done_callback(lambda _t: _chat_job_tasks.pop(job_id, None))
+
+
+def _update_turn_from_event(turn: dict, event: str, data: dict, state: dict) -> None:
+    if event == "research_plan":
+        turn["researchPlan"] = data
+    elif event == "clarify":
+        text = data.get("question") or ""
+        turn["clarify"] = text
+        state["clarified"] = text
+    elif event == "cases":
+        turn["cases"] = data
+    elif event == "statutes":
+        turn["statutes"] = data
+    elif event == "brief_review":
+        turn["briefReview"] = data
+    elif event == "citation_extract":
+        turn["citationExtract"] = data
+    elif event == "warning":
+        turn.setdefault("warnings", []).append(data.get("message") or "")
+    elif event == "error":
+        msg = data.get("message") or "Research failed. Please try again."
+        turn.setdefault("warnings", []).append(msg)
+    elif event == "token":
+        text = data.get("text") or ""
+        state["answer"] += text
+
+
+def _job_payload(request_payload: dict, turn: dict, state: dict) -> dict:
+    messages = []
+    for m in request_payload.get("messages") or []:
+        if isinstance(m, dict) and m.get("content"):
+            role = m.get("role") if m.get("role") in {"user", "assistant"} else "user"
+            messages.append({"role": role, "content": str(m.get("content") or "")})
+    final = state.get("clarified") or state.get("answer") or "(cases shown)"
+    messages.append({"role": "assistant", "content": final})
+    turn = dict(turn)
+    turn["answer"] = state.get("answer") or ""
+    existing_turns = request_payload.get("turns") if isinstance(request_payload.get("turns"), list) else []
+    return {
+        "version": 2,
+        "mode": request_payload.get("mode") or "chat",
+        "language": request_payload.get("language") or "en",
+        "messages": messages,
+        "turns": existing_turns + [turn],
+    }
+
+
+async def _run_chat_job(job_id: str, user_id: int, source_factory,
+                        request_payload: dict) -> None:
+    question = next((m.get("content", "") for m in reversed(request_payload.get("messages") or [])
+                     if isinstance(m, dict) and m.get("role") == "user"), "")
+    turn = {
+        "user": question,
+        "answer": "",
+        "clarify": "",
+        "researchPlan": None,
+        "cases": None,
+        "statutes": None,
+        "briefReview": None,
+        "citationExtract": None,
+        "warnings": [],
+    }
+    state = {"answer": "", "clarified": "", "value": False}
+    try:
+        async for block in source_factory():
+            event, data = _decode_sse(block)
+            if event == "done":
+                break
+            if event in {"clarify", "cases", "statutes", "brief_review", "citation_extract", "token"}:
+                state["value"] = True
+            _update_turn_from_event(turn, event, data, state)
+            await asyncio.to_thread(db.add_chat_event, job_id, event, data)
+
+        payload = _job_payload(request_payload, turn, state)
+        title = next((m.get("content", "") for m in payload["messages"] if m.get("role") == "user"), "Research")
+        session_id = await asyncio.to_thread(
+            db.save_session, user_id,
+            session_id=request_payload.get("session_id"),
+            title=title[:120] or "Research",
+            payload=payload,
+        )
+        await asyncio.to_thread(db.add_chat_event, job_id, "done", {
+            "session_id": session_id,
+            "server_saved": True,
+        })
+        await asyncio.to_thread(db.finish_chat_job, job_id, status="done",
+                                session_id=session_id, payload=payload)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.exception("chat job failed: %s", exc)
+        if not state.get("value"):
+            try:
+                await asyncio.to_thread(db.refund_question, user_id)
+            except Exception:
+                pass
+        await asyncio.to_thread(db.add_chat_event, job_id, "error", {
+            "message": "Research failed. Please try again."
+        })
+        await asyncio.to_thread(db.add_chat_event, job_id, "done", {})
+        await asyncio.to_thread(db.finish_chat_job, job_id, status="failed")
 
 
 _LANG_LABELS = {
@@ -1213,7 +1382,65 @@ async def chat(request: Request):
             yield _sse("token", {"text": _lt(language, "chat.summarizer_down")})
         yield _sse("done", {})
 
-    return StreamingResponse(gen(), media_type="text/event-stream")
+    title = question.strip() or "Research"
+    request_payload = {
+        "messages": messages,
+        "mode": mode,
+        "language": language,
+        "session_id": str(body.get("session_id") or "").strip() or None,
+        "turns": body.get("turns") if isinstance(body.get("turns"), list) else [],
+    }
+    job_id = await asyncio.to_thread(db.create_chat_job, user.id,
+                                     session_id=request_payload["session_id"],
+                                     title=title[:120], request=request_payload)
+    await asyncio.to_thread(db.add_chat_event, job_id, "job", {
+        "job_id": job_id,
+        "session_id": request_payload["session_id"],
+        "title": title[:120],
+        "question": question,
+        "mode": mode,
+        "language": language,
+    })
+    task = asyncio.create_task(_run_chat_job(job_id, user.id, lambda: gen(), request_payload))
+    _remember_chat_task(job_id, task)
+    return StreamingResponse(_stream_chat_job_events(request, user.id, job_id),
+                             media_type="text/event-stream")
+
+
+@app.get("/api/chat/jobs/active")
+async def chat_active_job(request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    job = await asyncio.to_thread(db.latest_running_chat_job, user.id)
+    return {"job": _public_chat_job(job) if job else None}
+
+
+@app.get("/api/chat/jobs/{job_id}")
+async def chat_job_get(job_id: str, request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    job = await asyncio.to_thread(db.get_chat_job, user.id, job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+    return {"job": _public_chat_job(job)}
+
+
+@app.get("/api/chat/jobs/{job_id}/events")
+async def chat_job_events(job_id: str, request: Request):
+    user = _current_user(request)
+    if not user:
+        return JSONResponse(status_code=401, content={"error": "not_authenticated"})
+    job = await asyncio.to_thread(db.get_chat_job, user.id, job_id)
+    if not job:
+        return JSONResponse(status_code=404, content={"error": "not_found"})
+    try:
+        after_id = int(request.query_params.get("after") or 0)
+    except ValueError:
+        after_id = 0
+    return StreamingResponse(_stream_chat_job_events(request, user.id, job_id, after_id=after_id),
+                             media_type="text/event-stream")
 
 
 @app.get("/api/health")
