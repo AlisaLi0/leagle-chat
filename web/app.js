@@ -49,6 +49,8 @@ const I18N = {
     'nav.brief': 'Brief Review',
     'nav.history': 'Research History',
     'history.empty': 'No research yet',
+    'history.delete': 'Delete',
+    'history.deleteConfirm': 'Delete this research history item?',
     'intro.h1': 'Find the law. Verify the source. Understand what it says.',
     'intro.lead': 'JuriCodex is a legal research workspace for U.S. law. Ask in plain English, search real cases, statutes, and regulations, and review citations you can open and verify.',
     'intro.engineKicker': 'Legal Reasoning Engine',
@@ -220,6 +222,8 @@ const I18N = {
     'nav.brief': 'Revisión de escrito',
     'nav.history': 'Historial de investigación',
     'history.empty': 'Aún no hay investigaciones',
+    'history.delete': 'Eliminar',
+    'history.deleteConfirm': '¿Eliminar este elemento del historial de investigación?',
     'intro.h1': 'Encuentra la ley. Verifica la fuente. Entiende lo que dice.',
     'intro.lead': 'JuriCodex es un espacio de investigación jurídica para derecho de EE. UU. Pregunta en lenguaje claro, busca casos, estatutos y regulaciones reales, y revisa citas que puedes abrir y verificar.',
     'intro.engineKicker': 'Motor de razonamiento legal',
@@ -391,6 +395,8 @@ const I18N = {
     'nav.brief': 'Brief Review',
     'nav.history': '调研历史',
     'history.empty': '还没有调研记录',
+    'history.delete': '删除',
+    'history.deleteConfirm': '删除这条调研历史记录？',
     'intro.h1': '找到法律。验证来源。理解其含义。',
     'intro.lead': 'JuriCodex 是面向美国法的法律调研工作台。用自然语言提问，搜索真实判例、成文法和法规，并检查可以打开和验证的引用。',
     'intro.engineKicker': '法律推理引擎',
@@ -562,6 +568,8 @@ const I18N = {
     'nav.brief': 'Brief Review',
     'nav.history': '調研歷史',
     'history.empty': '還沒有調研紀錄',
+    'history.delete': '刪除',
+    'history.deleteConfirm': '刪除這條調研歷史紀錄？',
     'intro.h1': '找到法律。驗證來源。理解其含義。',
     'intro.lead': 'JuriCodex 是面向美國法的法律調研工作台。用自然語言提問，搜尋真實判例、成文法和法規，並檢查可以打開和驗證的引用。',
     'intro.engineKicker': '法律推理引擎',
@@ -733,6 +741,8 @@ const I18N = {
     'nav.brief': 'Revue de mémoire',
     'nav.history': 'Historique de recherche',
     'history.empty': 'Aucune recherche pour le moment',
+    'history.delete': 'Supprimer',
+    'history.deleteConfirm': 'Supprimer cet élément de l’historique de recherche ?',
     'intro.h1': 'Trouver le droit. Vérifier la source. Comprendre ce qu’elle dit.',
     'intro.lead': 'JuriCodex est un espace de recherche juridique consacré au droit des États-Unis. Posez une question en langage clair, recherchez des affaires, lois et règlements réels, puis examinez les citations que vous pouvez ouvrir et vérifier.',
     'intro.engineKicker': 'Moteur de raisonnement juridique',
@@ -904,6 +914,8 @@ const I18N = {
     'nav.brief': 'Revisão de peça',
     'nav.history': 'Histórico de pesquisa',
     'history.empty': 'Nenhuma pesquisa ainda',
+    'history.delete': 'Excluir',
+    'history.deleteConfirm': 'Excluir este item do histórico de pesquisa?',
     'intro.h1': 'Encontre a lei. Verifique a fonte. Entenda o que ela diz.',
     'intro.lead': 'JuriCodex é um espaço de pesquisa jurídica para o direito dos EUA. Pergunte em linguagem clara, busque casos, leis e regulamentos reais, e revise citações que você pode abrir e verificar.',
     'intro.engineKicker': 'Motor de raciocínio jurídico',
@@ -1075,6 +1087,8 @@ const I18N = {
     'nav.brief': 'Brief Review',
     'nav.history': '조사 기록',
     'history.empty': '아직 조사 기록이 없습니다',
+    'history.delete': '삭제',
+    'history.deleteConfirm': '이 조사 기록을 삭제할까요?',
     'intro.h1': '법을 찾고, 출처를 확인하고, 그 의미를 이해하세요.',
     'intro.lead': 'JuriCodex는 미국법을 위한 법률 리서치 작업 공간입니다. 쉬운 말로 질문하고, 실제 판례·성문법·규정을 검색하며, 직접 열어 확인할 수 있는 인용을 검토하세요.',
     'intro.engineKicker': '법률 추론 엔진',
@@ -1246,6 +1260,8 @@ const I18N = {
     'nav.brief': 'Brief Review',
     'nav.history': 'リサーチ履歴',
     'history.empty': 'まだリサーチはありません',
+    'history.delete': '削除',
+    'history.deleteConfirm': 'このリサーチ履歴を削除しますか？',
     'intro.h1': '法律を見つける。出典を確認する。意味を理解する。',
     'intro.lead': 'JuriCodex は米国法のための法務リサーチ用ワークスペースです。自然な言葉で質問し、実在する判例・制定法・規則を検索し、開いて確認できる引用を確認できます。',
     'intro.engineKicker': '法的推論エンジン',
@@ -1417,6 +1433,8 @@ const I18N = {
     'nav.brief': 'Rà soát brief',
     'nav.history': 'Lịch sử nghiên cứu',
     'history.empty': 'Chưa có nghiên cứu nào',
+    'history.delete': 'Xóa',
+    'history.deleteConfirm': 'Xóa mục lịch sử nghiên cứu này?',
     'intro.h1': 'Tìm luật. Kiểm tra nguồn. Hiểu nội dung.',
     'intro.lead': 'JuriCodex là không gian nghiên cứu pháp lý cho luật Hoa Kỳ. Hỏi bằng ngôn ngữ thường ngày, tìm án lệ, đạo luật và quy định thật, rồi xem các trích dẫn mà bạn có thể mở và kiểm chứng.',
     'intro.engineKicker': 'Bộ máy suy luận pháp lý',
@@ -3404,23 +3422,71 @@ function renderHistory(sessions) {
   historyEl.innerHTML = '';
   if (me) {
     (sessions || []).forEach((s) => {
+      const row = document.createElement('div');
+      row.className = 'hist-row';
       const b = document.createElement('button');
       b.className = 'hist-item';
       b.title = s.title;
       b.innerHTML = `<span class="ht-type">Research</span>${escapeHtml(s.title)}`;
       b.addEventListener('click', () => { closeNav(); openSession(s.id); });
-      historyEl.appendChild(b);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'hist-del';
+      del.title = tr('history.delete');
+      del.setAttribute('aria-label', tr('history.delete'));
+      del.textContent = '×';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteHistoryItem(s.id, s.title);
+      });
+      row.appendChild(b);
+      row.appendChild(del);
+      historyEl.appendChild(row);
     });
   } else {
-    loadLocal().forEach((x) => {
+    loadLocal().forEach((x, i) => {
+      const row = document.createElement('div');
+      row.className = 'hist-row';
       const b = document.createElement('button');
       b.className = 'hist-item';
       b.title = x.q;
       b.innerHTML = `<span class="ht-type">Research</span>${escapeHtml(x.q)}`;
       b.addEventListener('click', () => { closeNav(); currentMode = 'chat'; send(x.q); });
-      historyEl.appendChild(b);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'hist-del';
+      del.title = tr('history.delete');
+      del.setAttribute('aria-label', tr('history.delete'));
+      del.textContent = '×';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteLocalHistoryItem(i);
+      });
+      row.appendChild(b);
+      row.appendChild(del);
+      historyEl.appendChild(row);
     });
   }
+}
+
+async function deleteHistoryItem(sessionId, title) {
+  if (!sessionId || !confirm(tr('history.deleteConfirm'))) return;
+  try {
+    const r = await api('/api/sessions/' + encodeURIComponent(sessionId), { method: 'DELETE' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (currentSessionId === sessionId) newResearch();
+    refreshHistory();
+  } catch {
+    showToast(tr('error.generic'));
+  }
+}
+
+function deleteLocalHistoryItem(index) {
+  if (!confirm(tr('history.deleteConfirm'))) return;
+  const arr = loadLocal();
+  arr.splice(index, 1);
+  saveLocal(arr);
+  renderHistory();
 }
 
 // Auto-save the active thread to the account after each completed turn.

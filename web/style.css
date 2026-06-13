@@ -72,6 +72,7 @@ html, body {
 .nav-ico { width: 18px; text-align: center; color: var(--accent); font-size: 14px; }
 
 .history { display: flex; flex-direction: column; gap: 2px; }
+.hist-row { display: grid; grid-template-columns: 1fr 24px; gap: 3px; align-items: stretch; }
 .hist-item {
   display: block; width: 100%; text-align: left;
   background: transparent; border: none; color: var(--ink);
@@ -79,8 +80,14 @@ html, body {
   font-size: 12.5px; line-height: 1.35;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.hist-item:hover { background: #fff; }
+.hist-item:hover, .hist-row:hover .hist-item { background: #fff; }
 .hist-item .ht-type { display: block; font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.hist-del {
+  width: 24px; min-width: 24px; border: none; border-radius: 8px;
+  background: transparent; color: var(--muted); cursor: pointer;
+  font-size: 16px; line-height: 1; display: flex; align-items: center; justify-content: center;
+}
+.hist-del:hover { background: var(--warn-soft, #fff6e6); color: var(--warn); }
 .history:empty::after { content: attr(data-empty); color: var(--muted); font-size: 12px; padding: 6px 10px; display: block; }
 
 /* ── Main column ──────────────────────────────────────────────── */
