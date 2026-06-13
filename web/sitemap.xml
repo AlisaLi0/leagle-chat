@@ -19,6 +19,12 @@
     <priority>0.3</priority>
   </url>
   <url>
+    <loc>https://juricodex.online/resources/</loc>
+    <lastmod>2026-06-13</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://juricodex.online/blog/legal-research-should-show-sources.html</loc>
     <lastmod>2026-06-13</lastmod>
     <changefreq>monthly</changefreq>

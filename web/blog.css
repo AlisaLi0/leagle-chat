@@ -83,6 +83,27 @@ a { color: var(--accent); }
   padding: 8px 14px; border-radius: 8px; color: #fff; background: var(--accent); text-decoration: none;
   font-weight: 800; font-size: 13px;
 }
+.resources-page { max-width: 1160px; }
+.resources-intro { max-width: 760px; margin-bottom: 56px; }
+.resources-intro h1 {
+  margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 58px; font-weight: 500;
+  line-height: 1.04; color: #05080b;
+}
+.resource-section { margin-top: 56px; }
+.section-copy { max-width: 720px; margin-bottom: 18px; }
+.section-copy h2 { margin-top: 0; }
+.section-copy p { color: var(--muted); }
+.guide-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
+.guide-grid-featured { grid-template-columns: minmax(0, 1fr); max-width: 780px; }
+.guide-card {
+  display: block; min-height: 210px; padding: 18px 0 20px; border-top: 1px solid var(--line);
+  color: var(--ink); text-decoration: none;
+}
+.guide-card:hover h3 { color: var(--accent); }
+.guide-card-featured { min-height: 0; padding-right: 28px; }
+.guide-meta { display: block; margin-bottom: 12px; color: var(--muted); font-size: 13px; font-weight: 700; }
+.guide-card h3 { margin: 0 0 10px; font-size: 20px; line-height: 1.25; }
+.guide-card p { margin: 0; color: #344b5c; font-size: 15px; line-height: 1.6; }
 @media (max-width: 720px) {
   .top { padding: 0 18px; }
   .brand { font-size: 22px; }
@@ -93,9 +114,13 @@ a { color: var(--accent); }
   .subtitle { margin-top: 22px; font-size: 17px; }
   .resource-sidebar { margin-top: 32px; padding-left: 24px; min-height: 0; }
   .meta-group { margin-bottom: 22px; }
+  .resources-intro h1 { font-size: 42px; }
+  .guide-grid { grid-template-columns: 1fr; gap: 10px; }
+  .guide-card { min-height: 0; }
 }
 
 @media (min-width: 721px) and (max-width: 980px) {
   .resource-hero { grid-template-columns: minmax(0, 1fr) 270px; gap: 38px; }
   h1 { font-size: 52px; }
+  .guide-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
